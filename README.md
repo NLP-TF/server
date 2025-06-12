@@ -1,36 +1,44 @@
-# FastAPI Server
+# 너… T야? 🤖💬
 
-A simple FastAPI server with basic CRUD operations.
+**MBTI 기반 T/F 위로 방식 분류 게임 – FastAPI + KoBERT + Hugging Face**
 
-## Setup
+---
 
-1. Create a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
+## 🎮 프로젝트 소개
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+**‘너T야?’**는 MBTI의 T(Thinking)형과 F(Feeling)형의 위로 스타일 차이를 AI가 학습하고, 사용자의 문장을 평가하여 점수화하는 인터랙티브 게임입니다.  
+사용자는 자신과 반대 성향의 위로 방식으로 문장을 작성하고, AI는 KoBERT 기반 분류 모델로 해당 문장의 ‘T/F스러움’을 수치화해 피드백합니다.
 
-## Running the Server
+---
+
+## 🧠 주요 기능
+
+- 사용자 입력 문장을 기반으로 T/F 유사도 예측
+- 점수화 및 누적 점수 관리
+- 라운드별 상황 제공 및 분석 결과 리턴
+- 유저 순위 및 백분위 통계 제공
+
+---
+
+## 📌 커밋 컨벤션 규칙
+
+커밋 메시지는 **"기능: 기능설명"** 형식으로 작성합니다.
+
+### ✅ 커밋 유형
+
+| 유형       | 설명                                               |
+| ---------- | -------------------------------------------------- |
+| `feat`     | 새로운 기능 추가 또는 기존 기능 수정               |
+| `fix`      | 기능에 대한 버그 수정                              |
+| `build`    | 빌드 관련 수정                                     |
+| `chore`    | 패키지 매니저 수정 및 기타 수정 (예: `.gitignore`) |
+| `docs`     | 문서(주석) 수정                                    |
+| `style`    | 코드 스타일 및 포맷팅 수정 (기능 변경 없음)        |
+| `refactor` | 기능 변경 없이 코드 리팩터링 (예: 변수명 변경)     |
+
+### 📝 커밋 메시지 예시
 
 ```bash
-uvicorn main:app --reload
+feat: Add user authentication
+fix: Resolve login button bug
 ```
-
-The server will start at `http://localhost:8000`
-
-## API Documentation
-
-- Interactive API docs (Swagger UI): http://localhost:8000/docs
-- Alternative API docs (ReDoc): http://localhost:8000/redoc
-
-## Endpoints
-
-- `GET /` - Welcome message
-- `GET /items/` - List all items
-- `POST /items/` - Create a new item
-- `GET /items/{item_id}` - Get a specific item by ID
