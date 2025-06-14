@@ -4,6 +4,77 @@
 
 ---
 
+## 🚀 빠른 시작
+
+### 1. 가상환경 설정 및 의존성 설치
+
+```bash
+# 가상환경 생성 (macOS/Linux)
+python -m venv venv
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 추가 의존성 설치 (만약 requirements.txt에 없을 경우)
+pip install torch transformers peft
+```
+
+### 2. 서버 실행
+
+```bash
+# 개발 모드로 실행 (자동 리로드 활성화)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
+```
+
+### 3. API 테스트
+
+#### 게임 시작
+```bash
+curl -X POST http://127.0.0.1:8000/game/start \
+  -H "Content-Type: application/json" \
+  -d '{"nickname":"테스트유저", "user_type":"T"}'
+```
+
+#### 라운드 정보 조회
+```bash
+# 1라운드 정보 조회
+curl http://127.0.0.1:8000/game/round/1
+```
+
+#### 응답 제출 및 점수 확인
+```bash
+# 세션 ID는 게임 시작 시 받은 값을 사용하세요
+curl -X POST http://127.0.0.1:8000/game/score \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"세션_ID", "user_response":"괜찮아? 다음에는 더 잘할 수 있을 거야!", "round_number":1}'
+```
+
+#### 게임 결과 요약
+```bash
+# 세션 ID로 결과 조회
+curl http://127.0.0.1:8000/game/summary/세션_ID
+```
+
+#### T/F 분류 모델 직접 테스트
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "가서 친구한테 얘기해봐."}'
+```
+
+### 4. 테스트
+
+```bash
+# 유닛 테스트 실행
+pytest
+
+# 코드 커버리지 확인 (pytest-cov 설치 필요)
+pytest --cov=app tests/
+```
+
+---
+
 ## 🎮 프로젝트 소개
 
 **'너T야?'**는 MBTI의 T(Thinking)형과 F(Feeling)형의 위로 스타일 차이를 AI가 학습하고, 사용자의 문장을 평가하여 점수화하는 인터랙티브 게임입니다.  
@@ -18,11 +89,28 @@
 - 라운드별 상황 제공 및 분석 결과 리턴
 - 유저 순위 및 백분위 통계 제공
 
+## 🛠 문제 해결
+
+### 모델 로딩 문제
+- 모델이 로드되지 않을 경우 `model_cache` 디렉토리를 삭제하고 재시도하세요:
+  ```bash
+  rm -rf model_cache
+  ```
+
+### 토큰 관련 오류
+- `token_type_ids` 관련 오류가 발생하면 서버를 재시작하세요.
+
+### 로그 확인
+- 서버 로그는 터미널에 실시간으로 출력됩니다.
+- `--log-level debug` 옵션으로 상세한 로그를 확인할 수 있습니다.
+
+---
+
 ## 🚀 API 엔드포인트
 
 ### 1. 게임 시작
 ```
-POST /game/start
+POST /api/v1/game/start
 ```
 
 **요청 본문 (JSON):**
@@ -43,8 +131,11 @@ POST /game/start
 
 ### 2. 라운드 정보 조회
 ```
-GET /game/round/{round_number}
+GET /api/v1/game/round/{round_number}
 ```
+
+**경로 파라미터:**
+- `round_number`: 라운드 번호 (1-5)
 
 **성공 응답 (200):**
 ```json
@@ -57,7 +148,7 @@ GET /game/round/{round_number}
 
 ### 3. 응답 제출 및 점수 획득
 ```
-POST /game/score
+POST /api/v1/game/score
 ```
 
 **요청 본문 (JSON):**
@@ -79,8 +170,11 @@ POST /game/score
 
 ### 4. 게임 결과 요약
 ```
-GET /game/summary/{session_id}
+GET /api/v1/game/summary/{session_id}
 ```
+
+**경로 파라미터:**
+- `session_id`: 게임 세션 ID
 
 **성공 응답 (200):**
 ```json

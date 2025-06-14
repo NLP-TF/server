@@ -37,10 +37,11 @@ app.add_middleware(
 )
 
 # Include routers
-from app.routers import game, predict
+from app.routers import game, predict, ranking
 
 app.include_router(predict.router)
 app.include_router(game.router)
+app.include_router(ranking.router)
 
 
 # 기본 예제 라우트

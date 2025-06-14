@@ -39,3 +39,23 @@ class GameSummary(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+class PlayerRanking(BaseModel):
+    nickname: str
+    score: float
+    average: float
+    rank: int
+
+class RankingResponse(BaseModel):
+    rankings: List[PlayerRanking]
+    total_players: int
+
+class PlayerScore(BaseModel):
+    nickname: str
+    total_score: float
+    game_count: int = 1
+    user_type: str = 'U'  # 'T' for Thinking, 'F' for Feeling, 'U' for Unknown
+    
+    @property
+    def average_score(self) -> float:
+        return self.total_score / self.game_count if self.game_count > 0 else 0.0
