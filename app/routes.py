@@ -1,7 +1,7 @@
 # app/routes.py
 from fastapi import APIRouter
 from pydantic import BaseModel
-from model.predict import predict_tf_style
+from app.model.predict import predict_tf_style
 
 router = APIRouter()
 

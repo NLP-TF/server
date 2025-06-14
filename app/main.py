@@ -3,27 +3,44 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-import uvicorn
-from app.routes import router as predict_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+import json
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
+# Create data directory if it doesn't exist
+os.makedirs("data", exist_ok=True)
+
+def initialize_stats() -> None:
+    """Initialize stats.json with empty leaderboard if it doesn't exist."""
+    stats_file = Path("data/stats.json")
+    if not stats_file.exists():
+        with open(stats_file, "w") as f:
+            json.dump({"leaderboard": [], "total_games": 0}, f)
+
+# Initialize the FastAPI application
 app = FastAPI(
-    title="FastAPI Server",
-    description="A FastAPI server for your application",
+    title="MBTI Game API",
+    description="API for MBTI-based T/F style classification game",
     version="1.0.0",
 )
 
-# CORS 설정
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 운영 환경에서는 꼭 제한할 것
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ predict 라우터 등록
-app.include_router(predict_router)
+# Include routers
+from app.routers import game, predict
+
+app.include_router(predict.router)
+app.include_router(game.router)
 
 
 # 기본 예제 라우트
