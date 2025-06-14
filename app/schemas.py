@@ -13,6 +13,7 @@ class GameStartRequest(BaseModel):
 class RoundResponse(BaseModel):
     round_number: int
     situation: str
+    friend_message: str
     example_response: str
 
 class ScoreRequest(BaseModel):

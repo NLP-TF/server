@@ -6,11 +6,46 @@
 
 ## 🚀 빠른 시작
 
-### 1. 가상환경 설정 및 의존성 설치
+### 1. Set Up PostgreSQL
+
+1. **Install PostgreSQL** if you haven't already:
+
+   - Mac: `brew install postgresql`
+   - Ubuntu: `sudo apt-get install postgresql postgresql-contrib`
+   - Windows: Download from [PostgreSQL Downloads](https://www.postgresql.org/download/windows/)
+
+2. **Create a new database and user**:
+
+   ```bash
+   # Connect to PostgreSQL
+   psql postgres
+
+   # Create a new database
+   CREATE DATABASE mbti_game;
+
+   # Create a new user (replace 'password' with a secure password)
+   CREATE USER mbti_user WITH PASSWORD 'password';
+
+   # Grant privileges
+   GRANT ALL PRIVILEGES ON DATABASE mbti_game TO mbti_user;
+
+   # Exit psql
+   \q
+   ```
+
+3. **Set up environment variables**:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Then edit the `.env` file with your database credentials.
+
+### 2. 가상환경 설정 및 의존성 설치
 
 ```bash
 # 가상환경 생성 (macOS/Linux)
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # Windows: .\venv\Scripts\activate
 
 # 의존성 설치
@@ -20,7 +55,7 @@ pip install -r requirements.txt
 pip install torch transformers peft
 ```
 
-### 2. 서버 실행
+### 3. 서버 실행
 
 ```bash
 # 개발 모드로 실행 (자동 리로드 활성화)
@@ -30,6 +65,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
 ### 3. API 테스트
 
 #### 게임 시작
+
 ```bash
 curl -X POST http://127.0.0.1:8000/game/start \
   -H "Content-Type: application/json" \
@@ -37,12 +73,14 @@ curl -X POST http://127.0.0.1:8000/game/start \
 ```
 
 #### 라운드 정보 조회
+
 ```bash
 # 1라운드 정보 조회
 curl http://127.0.0.1:8000/game/round/1
 ```
 
 #### 응답 제출 및 점수 확인
+
 ```bash
 # 세션 ID는 게임 시작 시 받은 값을 사용하세요
 curl -X POST http://127.0.0.1:8000/game/score \
@@ -51,12 +89,14 @@ curl -X POST http://127.0.0.1:8000/game/score \
 ```
 
 #### 게임 결과 요약
+
 ```bash
 # 세션 ID로 결과 조회
 curl http://127.0.0.1:8000/game/summary/세션_ID
 ```
 
 #### T/F 분류 모델 직접 테스트
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/predict \
   -H "Content-Type: application/json" \
@@ -92,15 +132,18 @@ pytest --cov=app tests/
 ## 🛠 문제 해결
 
 ### 모델 로딩 문제
+
 - 모델이 로드되지 않을 경우 `model_cache` 디렉토리를 삭제하고 재시도하세요:
   ```bash
   rm -rf model_cache
   ```
 
 ### 토큰 관련 오류
+
 - `token_type_ids` 관련 오류가 발생하면 서버를 재시작하세요.
 
 ### 로그 확인
+
 - 서버 로그는 터미널에 실시간으로 출력됩니다.
 - `--log-level debug` 옵션으로 상세한 로그를 확인할 수 있습니다.
 
@@ -109,19 +152,22 @@ pytest --cov=app tests/
 ## 🚀 API 엔드포인트
 
 ### 1. 게임 시작
+
 ```
 POST /api/v1/game/start
 ```
 
 **요청 본문 (JSON):**
+
 ```json
 {
   "nickname": "사용자닉네임",
-  "user_type": "T"  // 또는 "F"
+  "user_type": "T" // 또는 "F"
 }
 ```
 
 **성공 응답 (200):**
+
 ```json
 {
   "session_id": "생성된_세션_ID",
@@ -130,14 +176,17 @@ POST /api/v1/game/start
 ```
 
 ### 2. 라운드 정보 조회
+
 ```
 GET /api/v1/game/round/{round_number}
 ```
 
 **경로 파라미터:**
+
 - `round_number`: 라운드 번호 (1-5)
 
 **성공 응답 (200):**
+
 ```json
 {
   "round_number": 1,
@@ -147,11 +196,13 @@ GET /api/v1/game/round/{round_number}
 ```
 
 ### 3. 응답 제출 및 점수 획득
+
 ```
 POST /api/v1/game/score
 ```
 
 **요청 본문 (JSON):**
+
 ```json
 {
   "session_id": "세션_ID",
@@ -161,6 +212,7 @@ POST /api/v1/game/score
 ```
 
 **성공 응답 (200):**
+
 ```json
 {
   "score": 78.5,
@@ -169,14 +221,17 @@ POST /api/v1/game/score
 ```
 
 ### 4. 게임 결과 요약
+
 ```
 GET /api/v1/game/summary/{session_id}
 ```
 
 **경로 파라미터:**
+
 - `session_id`: 게임 세션 ID
 
 **성공 응답 (200):**
+
 ```json
 {
   "session_id": "세션_ID",
@@ -194,9 +249,24 @@ GET /api/v1/game/summary/{session_id}
   "percentile": 85.5,
   "rank": 4,
   "top_players": [
-    {"nickname": "최고수", "user_type": "F", "total_score": 480, "timestamp": "2025-06-14T12:00:00"},
-    {"nickname": "중간자", "user_type": "T", "total_score": 420, "timestamp": "2025-06-14T11:30:00"},
-    {"nickname": "초보자", "user_type": "F", "total_score": 380, "timestamp": "2025-06-14T10:45:00"}
+    {
+      "nickname": "최고수",
+      "user_type": "F",
+      "total_score": 480,
+      "timestamp": "2025-06-14T12:00:00"
+    },
+    {
+      "nickname": "중간자",
+      "user_type": "T",
+      "total_score": 420,
+      "timestamp": "2025-06-14T11:30:00"
+    },
+    {
+      "nickname": "초보자",
+      "user_type": "F",
+      "total_score": 380,
+      "timestamp": "2025-06-14T10:45:00"
+    }
   ],
   "feedback": "훌륭해요! 감정형(F) 스타일을 매우 잘 이해하고 계시네요!"
 }

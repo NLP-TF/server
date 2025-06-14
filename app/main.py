@@ -1,14 +1,19 @@
 # app/main.py
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import os
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import uvicorn
+from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Create data directory if it doesn't exist
 os.makedirs("data", exist_ok=True)
@@ -20,17 +25,41 @@ def initialize_stats() -> None:
         with open(stats_file, "w") as f:
             json.dump({"leaderboard": [], "total_games": 0}, f)
 
-# Initialize the FastAPI application
+# Database initialization
+from app.db.database import init_db, Base, engine
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Clean up on shutdown
+    await engine.dispose()
+
+# Initialize the FastAPI application with lifespan
 app = FastAPI(
     title="MBTI Game API",
     description="API for MBTI-based T/F style classification game",
     version="1.0.0",
+    lifespan=lifespan
 )
 
+# Add middleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # CORS middleware
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://127.0.0.1",
+    "http://127.0.0.1:3000",
+    "https://your-production-domain.com"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

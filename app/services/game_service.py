@@ -63,18 +63,19 @@ STATS_FILE = DEFAULT_DATA_DIR / "stats.json"
 DEFAULT_SCENARIOS = [
     {
         "situation": "친구가 시험에 떨어졌을 때",
-        "example_T": "다음에 더 잘하면 돼. 공부 방법을 바꿔봐.",
-        "example_F": "너무 속상하겠다. 괜찮아? 기분이 어때?"
+        "friend_message": "시험에 떨어졌어... 너무 속상해"
     },
     {
         "situation": "동료가 실수로 커피를 쏟았을 때",
-        "example_T": "다음엔 조심해. 휴지 좀 가져올게.",
-        "example_F": "괜찮아? 다치진 않았어? 너무 놀랐겠다."
+        "friend_message": "어머나, 미안해요! 제가 커피를 쏟아버렸어요..."
     },
     {
         "situation": "팀 프로젝트에서 의견이 엇갈릴 때",
-        "example_T": "각각의 장단점을 분석해보고 결정하자.",
-        "example_F": "모두의 의견을 들어보는 게 좋을 것 같아."
+        "friend_message": "우리 팀원들끼리 의견이 너무 안 맞는 것 같아..."
+    },
+    {
+        "situation": "소중한 물건을 잃어버렸을 때",
+        "friend_message": "남자친구가 사준 반지를 잃어버렸어 어떡하지"
     }
 ]
 
@@ -282,21 +283,12 @@ class GameService:
                 
             scenario = scenarios[round_number - 1]
             
-            # Return the round information
-            return {
-                "round_number": round_number,
-                "situation": scenario["situation"],
-                "example_response": scenario.get("example_response", ""),
-                "user_type": scenario.get("user_type", "T")  # Default to Thinking type if not specified
-            }
-        
-            # Prepare response with all required fields
+            # Prepare response with required fields
             round_data = {
                 "round_number": round_number,
                 "situation": scenario["situation"],
-                "example_T": scenario["example_T"],
-                "example_F": scenario["example_F"],
-                "example_response": ""  # Add empty string as default example response
+                "friend_message": scenario["friend_message"],
+                "example_response": ""
             }
             
             return round_data
