@@ -7,13 +7,26 @@ from pydantic import BaseModel
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, AsyncGenerator
 import uvicorn
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
+# Database
+from app.db.database import Base, engine, init_db, sync_engine
+
+# Routers
+from app.routers import game as game_router
+
 # Load environment variables
 load_dotenv()
+
+# Create database tables on startup
+async def create_tables():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    # Also create tables in sync database
+    Base.metadata.create_all(bind=sync_engine)
 
 # Create data directory if it doesn't exist
 os.makedirs("data", exist_ok=True)
@@ -25,16 +38,22 @@ def initialize_stats() -> None:
         with open(stats_file, "w") as f:
             json.dump({"leaderboard": [], "total_games": 0}, f)
 
-# Database initialization
-from app.db.database import init_db, Base, engine
-
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize database tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Create database tables
+    await create_tables()
+    print("✅ Database tables created")
+    
+    # Initialize stats
+    initialize_stats()
+    
+    # Load initial data or perform startup events
+    # For example, load ML models, connect to databases, etc.
+    
     yield
-    # Clean up on shutdown
+    
+    # Clean up resources on shutdown
+    # For example, close database connections, etc.
     await engine.dispose()
 
 # Initialize the FastAPI application with lifespan
@@ -66,46 +85,37 @@ app.add_middleware(
 )
 
 # Include routers
-from app.routers import game, predict, ranking
+app.include_router(game_router.router)
 
-app.include_router(predict.router)
-app.include_router(game.router)
-app.include_router(ranking.router)
+# Example route
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the MBTI Game API"}
 
-
-# 기본 예제 라우트
+# Sample data model
 class Item(BaseModel):
     name: str
     description: Optional[str] = None
     price: float
     tax: Optional[float] = None
 
-
+# Sample routes (can be removed if not needed)
 items_db = []
 
-
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the FastAPI server!"}
-
-
-@app.get("/items/", response_model=List[Item])
+@app.get("/items/")
 async def read_items():
     return items_db
 
-
-@app.post("/items/", response_model=Item)
+@app.post("/items/")
 async def create_item(item: Item):
     items_db.append(item)
     return item
 
-
-@app.get("/items/{item_id}", response_model=Item)
+@app.get("/items/{item_id}")
 async def read_item(item_id: int):
     if item_id < 0 or item_id >= len(items_db):
         raise HTTPException(status_code=404, detail="Item not found")
     return items_db[item_id]
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

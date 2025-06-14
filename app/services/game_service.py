@@ -5,6 +5,7 @@ This module provides the GameService class which handles the core game logic,
 including session management, scoring, and leaderboard functionality.
 """
 
+import aiofiles
 import json
 import logging
 import os
@@ -14,6 +15,13 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, cast, TypedDict
+
+# Database
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
+from app.db.database import sync_engine
+from app.db.models import GameSession as DBGameSession, PlayerScore as DBPlayerScore
+from .db_utils import get_db_session
 
 from app.models.predict import predict_tf_style
 from app.schemas import UserType, RoundScore, GameSummary
@@ -83,13 +91,13 @@ DEFAULT_SCENARIOS = [
 GameSessions = Dict[str, GameSessionDict]
 Leaderboard = List[Dict[str, Any]]  # Using Dict for backward compatibility
 
-# In-memory storage for game state
-sessions: Dict[str, GameSessionDict] = {}
-leaderboard: List[Dict[str, Any]] = []  # Global leaderboard storage
+# Database session dependency
+def get_db():
+    with get_db_session() as db:
+        yield db
 
-# Initialize leaderboard if it doesn't exist
-if not isinstance(globals().get('leaderboard'), list):
-    leaderboard = []
+# In-memory storage for active game sessions (temporary, will be replaced with DB)
+sessions: Dict[str, GameSessionDict] = {}
 
 
 def ensure_data_directory() -> None:
@@ -208,10 +216,25 @@ class GameService:
         Loads game scenarios and statistics, and initializes the service.
         """
         self.scenarios = load_scenarios()
-        self.stats = load_stats()
-        logger.info("GameService initialized with %d scenarios", len(self.scenarios))
+        try:
+            self.stats = load_stats() or {
+                'total_games': 0,
+                'total_players': 0,
+                'avg_score': 0.0,
+                'last_updated': datetime.now().isoformat()
+            }
+            logger.info("GameService initialized with %d scenarios and stats", len(self.scenarios))
+        except Exception as e:
+            logger.error("Failed to load stats: %s", str(e))
+            self.stats = {
+                'total_games': 0,
+                'total_players': 0,
+                'avg_score': 0.0,
+                'last_updated': datetime.now().isoformat()
+            }
+            logger.info("GameService initialized with default stats")
         
-    def start_game(self, nickname: str, user_type: UserType) -> str:
+    async def start_game(self, nickname: str, user_type: UserType) -> str:
         """Start a new game session.
         
         Args:
@@ -224,37 +247,58 @@ class GameService:
         Raises:
             ValueError: If nickname is empty or user_type is invalid
         """
-        if not nickname or not isinstance(nickname, str):
-            raise ValueError("Nickname is required and must be a string")
+        if not nickname or not nickname.strip():
+            raise ValueError("Nickname cannot be empty")
             
-        if not isinstance(user_type, UserType):
-            raise ValueError("Invalid user type")
+        # Convert string to UserType if needed
+        if isinstance(user_type, str):
+            try:
+                user_type = UserType(user_type.upper())
+            except ValueError:
+                raise ValueError("Invalid user type. Must be 'T' or 'F'")
         
+        if user_type not in (UserType.THINKING, UserType.FEELING):
+            raise ValueError("Invalid user type. Must be 'T' or 'F'")
+            
+        db = next(get_db())
         try:
-            session_id = str(uuid.uuid4())
-            scenarios = self.scenarios.copy()
-            random.shuffle(scenarios)
+            # Create new game session in database
+            db_session = DBGameSession(
+                id=str(uuid.uuid4()),
+                nickname=nickname,
+                user_type=user_type.value,
+                total_score=0.0
+            )
             
-            # Create new game session
-            sessions[session_id] = {
-                "session_id": session_id,
-                "nickname": nickname,
-                "user_type": user_type,
-                "scenarios": scenarios,
-                "current_round": 0,
-                "scores": [],
-                "start_time": datetime.now(),
-                "end_time": None,
-                "responses": []
-            }
-            
-            logger.info("Started new game session: %s for %s", session_id, nickname)
-            return session_id
-            
+            async with db.begin():
+                db.add(db_session)
+                await db.flush()
+                
+                # Also store in memory for active sessions
+                sessions[db_session.id] = {
+                    'session_id': db_session.id,
+                    'nickname': nickname,
+                    'user_type': user_type,
+                    'scenarios': self.scenarios.copy(),
+                    'current_round': 1,
+                    'scores': [],
+                    'responses': [],
+                    'start_time': datetime.now(),
+                    'end_time': None,
+                    'completed': False
+                }
+                
+                logger.info("Started new game session %s for %s (type: %s)", 
+                          db_session.id, nickname, user_type)
+                return db_session.id
+                
         except Exception as e:
-            logger.error("Failed to start game: %s", e, exc_info=True)
-            raise
-    
+            await db.rollback()
+            logger.error("Failed to start game: %s", str(e))
+            raise ValueError(f"Failed to start game: {str(e)}")
+        finally:
+            await db.close()
+            
     def get_round(self, round_number: int) -> Optional[Dict[str, Any]]:
         """Get round information by number.
         
@@ -297,12 +341,12 @@ class GameService:
             logger.error("Error getting round %d: %s", round_number, e)
             return None
     
-    def submit_response(
-        self, 
-        session_id: str, 
-        user_response: str, 
-        round_number: int
-    ) -> Optional[Dict[str, Any]]:
+    async def submit_response(
+            self, 
+            session_id: str, 
+            user_response: str, 
+            round_number: int
+        ) -> Optional[Dict[str, Any]]:
         """Submit a user response for a round and return the score.
         
         Args:
@@ -316,69 +360,97 @@ class GameService:
         Raises:
             ValueError: If input validation fails
         """
-        if not session_id or not isinstance(session_id, str):
-            raise ValueError("Session ID is required and must be a string")
+        if not session_id or not user_response or not round_number:
+            raise ValueError("Missing required fields")
             
-        if not user_response or not isinstance(user_response, str):
-            raise ValueError("Response text is required and must be a string")
-            
-        if not isinstance(round_number, int) or round_number < 1:
-            raise ValueError("Round number must be a positive integer")
-        
         if session_id not in sessions:
-            logger.warning("Session not found: %s", session_id)
-            return None
+            raise ValueError("Invalid session ID")
             
         session = sessions[session_id]
         
         # Validate round number
-        expected_round = session["current_round"] + 1
-        if round_number != expected_round:
-            logger.warning("Invalid round number: expected %d, got %d", 
-                         expected_round, round_number)
-            return None
-            
-        if round_number > len(session["scenarios"]):
-            logger.warning("Round number %d exceeds total rounds", round_number)
-            return None
+        if round_number != session['current_round']:
+            raise ValueError(f"Invalid round number. Expected {session['current_round']}, got {round_number}")
         
+        # Validate response
+        user_response = user_response.strip()
+        if not user_response:
+            raise ValueError("Response cannot be empty")
+        
+        # Calculate score and determine if response matches the opposite style
+        score = self._calculate_score(user_response, session['user_type'])
+        is_correct_style = score >= 50.0  # Assuming 50% is the threshold
+        
+        # Get a new async database session
+        db = next(get_db())
         try:
-            # Calculate score
-            score = self._calculate_score(user_response, session["user_type"])
-            
-            # Update session
-            session["current_round"] = round_number
-            session["scores"].append(score)
-            session["responses"].append({
-                "round": round_number,
-                "response": user_response,
-                "score": score,
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            logger.debug("Round %d score for session %s: %.2f", 
-                        round_number, session_id, score)
-            
-            # If game is complete, finalize it
-            is_complete = session["current_round"] >= len(session["scenarios"])
+            # Start a transaction
+            async with db.begin():
+                # Get the game session from database
+                stmt = select(DBGameSession).where(DBGameSession.id == session_id)
+                result = await db.execute(stmt)
+                db_session = result.scalar_one_or_none()
+                if not db_session:
+                    raise ValueError("Game session not found in database")
+                
+                # Save player score to database
+                player_score = DBPlayerScore(
+                    session_id=session_id,
+                    round_number=round_number,
+                    user_response=user_response,
+                    is_correct_style=is_correct_style,
+                    score=score
+                )
+                
+                # Add player score
+                db.add(player_score)
+                
+                # Update total score in game session
+                db_session.total_score = (db_session.total_score or 0.0) + score
+                
+                # Store response in memory for active session
+                session['scores'].append(score)
+                session['responses'].append({
+                    'round': round_number,
+                    'response': user_response,
+                    'score': score,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                # Update current round
+                session['current_round'] += 1
+                
+                # Check if game is complete (after 5 rounds)
+                is_complete = round_number >= 5  # Game ends after 5 rounds
+                if is_complete:
+                    db_session.completed = True
+                    db_session.completed_at = datetime.now()
+                    logger.info("Marking game as complete. Round: %d/5", round_number)
+                
+                # Commit the transaction
+                await db.commit()
+                
+            # Complete the game outside the transaction if needed
             if is_complete:
-                logger.info("Game complete for session %s", session_id)
-                self._complete_game(session_id)
-            
+                # Use a new session for game completion to avoid transaction conflicts
+                await self._complete_game(session_id)
+                
             return {
-                "score": score,
-                "round_number": round_number,
-                "is_complete": is_complete,
-                "total_score": sum(session["scores"]),
-                "rounds_remaining": len(session["scenarios"]) - round_number
+                'score': score,
+                'round_number': round_number,
+                'is_complete': is_complete,
+                'total_score': db_session.total_score,
+                'rounds_remaining': 5 - round_number  # Fixed 5 rounds total
             }
-            
+                
         except Exception as e:
-            logger.error("Error processing response for session %s: %s", 
-                        session_id, e, exc_info=True)
-            raise
-    
-    def get_summary(self, session_id: str) -> Dict[str, Any]:
+            await db.rollback()
+            logger.error("Error processing response: %s", str(e), exc_info=True)
+            raise ValueError(f"Failed to process response: {str(e)}")
+        finally:
+            await db.close()
+            
+    async def get_summary(self, session_id: str) -> Dict[str, Any]:
         """Get game summary including scores and leaderboard position.
         
         Args:
@@ -390,82 +462,122 @@ class GameService:
         Raises:
             ValueError: If session_id is invalid
         """
-        global leaderboard, sessions
-        
-        if not session_id or not isinstance(session_id, str):
-            raise ValueError("Session ID is required and must be a string")
-            
-        if session_id not in sessions:
-            logger.warning("Session not found: %s", session_id)
-            raise ValueError("Invalid session ID")
-            
+        db = next(get_db())
         try:
-            session = sessions[session_id]
-            round_scores = session.get("scores", [])
-            total_score = sum(round_scores) if round_scores else 0.0
-            
-            logger.debug("Generating summary for session %s with score %.2f", 
-                        session_id, total_score)
-            
-            # Complete the game if not already completed
-            if not session.get("completed", False):
-                logger.debug("Game not marked as completed, completing now")
-                self._complete_game(session_id)
-            
-            # Calculate percentile
-            percentile = self._calculate_percentile(total_score)
-            
-            # Get top players for the summary
-            top_players = self._get_top_players(3)
-            
-            # Prepare round scores with additional metadata
-            round_details = []
-            for i, score in enumerate(round_scores):
-                try:
-                    response = session["responses"][i] if i < len(session.get("responses", [])) else {}
-                    round_details.append({
-                        "round_number": i + 1,
-                        "score": score,
-                        "user_response": response.get("response", ""),
-                        "is_correct_style": score > 50,  # Score > 50 means correct style
-                        "timestamp": response.get("timestamp", datetime.now().isoformat())
-                    })
-                except (IndexError, KeyError) as e:
-                    logger.warning("Error processing round %d details: %s", i + 1, e)
-                    continue
-            
-            # Create summary dictionary
-            summary = {
-                "session_id": session_id,
-                "nickname": session.get("nickname", ""),
-                "user_type": session.get("user_type", UserType.THINKING).value,
-                "start_time": session.get("start_time", datetime.now()).isoformat(),
-                "end_time": session.get("end_time", datetime.now()).isoformat(),
-                "total_rounds": len(session.get("scenarios", [])),
-                "completed_rounds": len(round_scores),
-                "total_score": total_score,
-                "round_scores": round_details,
-                "percentile": round(percentile, 1),
-                "rank": self._calculate_rank(total_score, leaderboard),
-                "feedback": self._generate_feedback(session, total_score),
-                "top_players": top_players
-            }
-            
-            # Validate against the Pydantic model
-            try:
-                game_summary = GameSummary(**summary)
-                logger.debug("Successfully validated game summary")
-                return game_summary.dict()
-            except Exception as e:
-                logger.error("GameSummary validation error: %s", e, exc_info=True)
-                # Return the summary even if validation fails, but log the error
-                return summary
+            # Start a transaction
+            async with db.begin():
+                # Get game session from database using SQLAlchemy 2.0 async syntax
+                stmt = select(DBGameSession).where(DBGameSession.id == session_id)
+                result = await db.execute(stmt)
+                db_session = result.scalar_one_or_none()
+                if not db_session:
+                    raise ValueError("Game session not found")
+                    
+                # Get all scores for this session
+                stmt = select(DBPlayerScore).where(
+                    DBPlayerScore.session_id == session_id
+                ).order_by(DBPlayerScore.round_number)
+                result = await db.execute(stmt)
+                scores = result.scalars().all()
                 
+                if not scores:
+                    raise ValueError("No scores found for this session")
+                    
+                # Calculate total score if not already set
+                if not db_session.total_score:
+                    db_session.total_score = sum(score.score for score in scores)
+                    await db.flush()
+                
+                total_score = db_session.total_score
+                
+                # Get leaderboard data - filter for completed games (where completed_at is not null)
+                stmt = select(
+                    DBGameSession.id,
+                    DBGameSession.nickname,
+                    DBGameSession.user_type,
+                    DBGameSession.total_score,
+                    DBGameSession.completed_at
+                ).where(
+                    DBGameSession.completed_at.isnot(None)
+                ).order_by(
+                    DBGameSession.total_score.desc()
+                )
+                
+                result = await db.execute(stmt)
+                leaderboard_data = result.all()
+                
+                # Convert to list of dicts for compatibility
+                leaderboard = [{
+                    'id': str(session.id),
+                    'nickname': session.nickname,
+                    'user_type': session.user_type,
+                    'total_score': float(session.total_score) if session.total_score else 0.0,
+                    'completed_at': session.completed_at.isoformat() if session.completed_at else None
+                } for session in leaderboard_data]
+                
+                # Calculate rank and percentile
+                rank = await self._calculate_rank(total_score, leaderboard)
+                percentile = await self._calculate_percentile(total_score)
+                
+                # Get top players (excluding current player)
+                top_players = [
+                    {
+                        'nickname': str(p['nickname']),
+                        'score': str(float(p['total_score'])),  # Convert to float then string
+                        'rank': str(i + 1)  # Convert rank to string
+                    }
+                    for i, p in enumerate(leaderboard)
+                    if p['id'] != session_id
+                ][:3]  # Take top 3
+                
+                # Prepare round scores
+                round_scores = [{
+                    'round_number': score.round_number,
+                    'score': score.score,
+                    'user_response': score.user_response,
+                    'is_correct_style': score.is_correct_style
+                } for score in scores]
+                
+                # Generate feedback
+                feedback = self._generate_feedback({
+                    'user_type': db_session.user_type,
+                    'scores': [s.score for s in scores]
+                }, total_score)
+                
+                # Create summary dictionary
+                summary = {
+                    "session_id": session_id,
+                    "nickname": db_session.nickname,
+                    "user_type": db_session.user_type,
+                    "start_time": db_session.created_at.isoformat(),
+                    "end_time": db_session.completed_at.isoformat() if db_session.completed_at else None,
+                    "total_rounds": len(self.scenarios),
+                    "completed_rounds": len(round_scores),
+                    "total_score": float(total_score) if total_score else 0.0,
+                    "round_scores": round_scores,
+                    "percentile": percentile,
+                    "rank": rank,
+                    "feedback": feedback,
+                    "top_players": top_players
+                }
+                
+                # Validate against the Pydantic model
+                try:
+                    game_summary = GameSummary(**summary)
+                    logger.debug("Successfully validated game summary")
+                    return game_summary.dict()
+                except Exception as e:
+                    logger.error("GameSummary validation error: %s", e, exc_info=True)
+                    # Return the summary even if validation fails, but log the error
+                    return summary
+                    
         except Exception as e:
             logger.error("Error generating game summary: %s", e, exc_info=True)
             raise
+        finally:
+            await db.close()
     
-    def _calculate_percentile(self, score: float) -> float:
+    async def _calculate_percentile(self, score: float) -> float:
         """Calculate the percentile rank of a score relative to the leaderboard.
         
         Args:
@@ -474,81 +586,112 @@ class GameService:
         Returns:
             float: Percentile rank (0-100)
         """
-        global leaderboard
-        
-        # Ensure leaderboard is a list
-        current_leaderboard = leaderboard if isinstance(leaderboard, list) else []
-        
-        if not current_leaderboard:
-            return 100.0
+        db = next(get_db())
+        try:
+            # Get total number of completed games
+            stmt = select(func.count()).select_from(DBGameSession).where(
+                DBGameSession.completed_at.isnot(None)
+            )
+            result = await db.execute(stmt)
+            total_players = result.scalar()
             
-        # Count how many players have a lower or equal score
-        better_scores = [
-            float(s.get("total_score", 0)) 
-            for s in current_leaderboard 
-            if float(s.get("total_score", 0)) >= score
-        ]
+            if total_players == 0:
+                return 100.0
+                
+            # Count how many players have a lower score
+            stmt = select(func.count()).select_from(DBGameSession).where(
+                DBGameSession.completed_at.isnot(None),
+                DBGameSession.total_score >= score
+            )
+            result = await db.execute(stmt)
+            better_players = result.scalar()
+            
+            # Calculate percentile (0-100)
+            percentile = (better_players / total_players) * 100
+            return min(100.0, max(0.0, percentile))  # Ensure within 0-100 range
+            
+        except Exception as e:
+            logger.error("Error calculating percentile: %s", str(e), exc_info=True)
+            return 100.0  # Return 100% on error to avoid breaking the game
+        finally:
+            await db.close()
         
-        # Calculate percentile (0-100)
-        percentile = (len(better_scores) / len(current_leaderboard)) * 100 if current_leaderboard else 100
-        return min(100.0, max(0.0, percentile))  # Ensure within 0-100 range
-        
-    def _calculate_rank(self, score: float, leaderboard_data: List[Dict[str, Any]]) -> int:
+    async def _calculate_rank(self, score: float, leaderboard_data: List[Dict[str, Any]] = None) -> int:
         """Calculate the rank of a score in the leaderboard.
         
         Args:
             score: The score to find rank for
-            leaderboard_data: The leaderboard data
+            leaderboard_data: Optional leaderboard data (if not provided, will query the database)
             
         Returns:
             int: 1-based rank (1 is best)
         """
-        if not leaderboard_data:
-            return 1
+        if leaderboard_data is not None:
+            # Use provided leaderboard data
+            if not leaderboard_data:
+                return 1
             
-        # Count how many players have a higher score and add 1 for 1-based ranking
-        higher_scores = [s for s in leaderboard_data 
-                        if s.get("total_score", 0) > score]
-        return len(higher_scores) + 1
+            # Count how many players have a higher score and add 1 for 1-based ranking
+            higher_scores = [s for s in leaderboard_data 
+                          if s.get("total_score", 0) > score]
+            return len(higher_scores) + 1
+            
+        # If leaderboard data not provided, query the database
+        db = next(get_db())
+        try:
+            stmt = select(func.count()).select_from(DBGameSession).where(
+                DBGameSession.completed_at.isnot(None),
+                DBGameSession.total_score > score
+            )
+            result = await db.execute(stmt)
+            rank = result.scalar() + 1  # Add 1 for 1-based ranking
+            return rank
+                
+        except Exception as e:
+            logger.error("Error calculating rank: %s", str(e), exc_info=True)
+            return 1  # Return rank 1 on error to avoid breaking the game
+        finally:
+            await db.close()
         
-    def _get_top_players(self, count: int = 3) -> List[Dict[str, str]]:
+    async def _get_top_players(self, count: int = 3) -> List[Dict[str, str]]:
         """Get the top N players from the leaderboard.
         
         Args:
-            count: Number of top players to return
+            count: Number of top players to return (default: 3)
             
         Returns:
-            List[Dict[str, str]]: List of top players with nickname and score as string
+            List[Dict[str, str]]: List of top players with nickname, score and rank
         """
-        global leaderboard
-        
+        db = next(get_db())
         try:
-            # Ensure leaderboard is a list
-            current_leaderboard = leaderboard if isinstance(leaderboard, list) else []
+            # Query completed game sessions ordered by total_score (descending)
+            stmt = select(DBGameSession).where(
+                DBGameSession.completed_at.isnot(None)
+            ).order_by(
+                DBGameSession.total_score.desc()
+            ).limit(count)
             
-            if not current_leaderboard:
-                return []
+            result = await db.execute(stmt)
+            top_sessions = result.scalars().all()
+            
+            # Format the top players
+            top_players = []
+            for i, session in enumerate(top_sessions, 1):
+                top_players.append({
+                    "nickname": session.nickname or "Anonymous",
+                    "score": str(session.total_score or 0),
+                    "rank": str(i)
+                })
                 
-            # Sort by total_score descending and take top N
-            sorted_players = sorted(
-                current_leaderboard, 
-                key=lambda x: float(x.get("total_score", 0)), 
-                reverse=True
-            )[:max(1, count)]  # Ensure at least 1 player is returned
-            
-            return [
-                {
-                    "nickname": str(p.get("nickname", "")),
-                    "score": str(p.get("total_score", 0))
-                }
-                for p in sorted_players
-            ]
+            return top_players
             
         except Exception as e:
-            logger.error("Error getting top players: %s", e, exc_info=True)
+            logger.error("Error getting top players: %s", str(e), exc_info=True)
             return []
+        finally:
+            await db.close()
             
-    def _complete_game(self, session_id: str) -> None:
+    async def _complete_game(self, session_id: str) -> None:
         """Mark a game as completed and update leaderboard and stats.
         
         Args:
@@ -557,181 +700,122 @@ class GameService:
         Raises:
             ValueError: If session_id is invalid
         """
-        global leaderboard, sessions
-        
-        if not session_id or not isinstance(session_id, str):
-            raise ValueError("Session ID is required and must be a string")
-            
-        if session_id not in sessions:
-            logger.warning("Session %s not found in _complete_game", session_id)
-            return
-            
+        db = next(get_db())
         try:
-            session = sessions[session_id]
-            session["completed"] = True
-            session["end_time"] = datetime.now()
-            
-            # Calculate total score
-            round_scores = session.get("scores", [])
-            total_score = sum(round_scores) if round_scores else 0.0
-            
-            logger.info("Completing game for %s (session: %s) with score: %.2f", 
-                       session.get("nickname", "Unknown"), session_id, total_score)
-            
-            # Update ranking service
-            self._update_ranking_service(session, total_score)
-            
-            # Save stats
-            self._save_game_stats()
-            
-            logger.info("Successfully completed game for session %s", session_id)
-            
+            # Start a new transaction
+            async with db.begin():
+                # Get the game session from database using SQLAlchemy 2.0 syntax with async
+                stmt = select(DBGameSession).where(DBGameSession.id == session_id)
+                result = await db.execute(stmt)
+                db_session = result.scalar_one_or_none()
+                if not db_session:
+                    raise ValueError("Game session not found")
+                    
+                # Get the session from memory
+                session = sessions.get(session_id)
+                if not session:
+                    raise ValueError("Session data not found")
+                    
+                # Calculate total score
+                total_score = sum(session.get('scores', []))
+                
+                # Update the database session
+                db_session.completed_at = datetime.now()
+                db_session.total_score = total_score
+                
+                # Flush changes to the database
+                await db.flush()
+                
+                # Update stats
+                self.stats["total_games"] = self.stats.get("total_games", 0) + 1
+                self.stats["total_players"] = len(sessions)
+                
+                # Save updated stats
+                self._save_game_stats()
+                
+                logger.info(f"Game {session_id} completed with score {total_score}")
+                
+                # Update the ranking service asynchronously
+                await self._update_ranking_service({
+                    'id': session_id,
+                    'nickname': session.get('nickname', 'Anonymous'),
+                    'user_type': session.get('user_type', 'T'),
+                    'total_score': total_score,
+                    'timestamp': datetime.now().isoformat()
+                }, total_score)
+                
         except Exception as e:
-            logger.error("Error completing game: %s", e, exc_info=True)
+            await db.rollback()
+            logger.error(f"Error completing game {session_id}: {str(e)}", exc_info=True)
             raise
+        finally:
+            await db.close()
             
-    def _update_ranking_service(self, session: Dict[str, Any], total_score: float) -> None:
-        """
-        Update the ranking service with the player's score.
+    async def _update_ranking_service(self, session: Dict[str, Any], total_score: float) -> None:
+        """Update the ranking service with the player's score.
         
         Args:
             session: The game session data
             total_score: The player's total score
-        """
-        global leaderboard
-        
-        try:
-            # Ensure leaderboard is properly initialized
-            current_leaderboard = leaderboard if isinstance(leaderboard, list) else []
             
-            # Update the ranking service
-            ranking_service.update_ranking(
+        Note:
+            This method is called within a database transaction, so it should not
+            perform any database operations that would conflict with the transaction.
+        """
+        try:
+            logger.debug("Starting ranking update for session %s", session.get("id", "unknown"))
+            
+            # Ensure we have a valid session ID
+            session_id = session.get("id")
+            if not session_id:
+                logger.warning("Cannot update ranking: missing session ID")
+                return
+                
+            # Update the ranking service asynchronously
+            await ranking_service.update_ranking(
                 nickname=session.get("nickname", "Anonymous"),
                 score=total_score,
-                user_type=session.get("user_type", UserType.THINKING).value,
-                session_id=session.get("session_id")
+                user_type=session.get("user_type", "T"),  # Default to 'T' if not specified
+                session_id=session_id
             )
             
-            # Create leaderboard entry
-            leaderboard_entry = {
-                "session_id": session.get("session_id", ""),
-                "nickname": session.get("nickname", ""),
-                "user_type": session.get("user_type", UserType.THINKING).value,
-                "total_score": total_score,
-                "timestamp": session.get("end_time", datetime.now()).isoformat()
-            }
+            logger.info("Successfully updated ranking for session %s with score %.2f", 
+                       session_id, total_score)
             
-            # Create a new list to avoid modifying the global during iteration
-            updated_leaderboard = list(current_leaderboard)
+            # Try to log current rankings for debugging
+            try:
+                rankings_file = ranking_service.rankings_file
+                if rankings_file.exists():
+                    async with aiofiles.open(rankings_file, 'r') as f:
+                        content = await f.read()
+                        logger.debug("Current rankings: %s", content)
+            except Exception as e:
+                logger.debug("Could not read rankings file: %s", str(e))
             
-            # Check if this session is already in the leaderboard
-            session_id = leaderboard_entry.get("session_id")
-            if session_id:  # Only proceed if we have a valid session_id
-                existing_index = next(
-                    (i for i, e in enumerate(updated_leaderboard) 
-                     if e.get("session_id") == session_id),
-                    None
-                )
-                
-                if existing_index is not None:
-                    # Update existing entry
-                    updated_leaderboard[existing_index] = leaderboard_entry
-                else:
-                    # Add new entry
-                    updated_leaderboard.append(leaderboard_entry)
-                
-                # Sort and keep top 100 entries
-                updated_leaderboard.sort(key=lambda x: float(x.get("total_score", 0)), reverse=True)
-                
-                # Update the global leaderboard
-                leaderboard = updated_leaderboard[:100]
-                
-                logger.info("Updated ranking service and leaderboard for player: %s", 
-                           session.get("nickname", "Anonymous"))
-            else:
-                logger.warning("Cannot update leaderboard: missing session_id in leaderboard entry")
-                       
         except Exception as e:
-            logger.error("Error updating ranking: %s", e, exc_info=True)
-            raise
+            logger.error("Error updating ranking service: %s", str(e), exc_info=True)
+            # Don't re-raise to avoid disrupting game flow
+            pass
             
     def _update_leaderboard(self, entry: Dict[str, Any]) -> None:
         """Update the leaderboard with a new or updated entry.
         
+        Note: This method is kept for backward compatibility but is no longer needed
+        as leaderboard is now managed by the database.
+        
         Args:
             entry: The leaderboard entry to add or update
         """
-        global leaderboard
-        
         try:
-            # Ensure leaderboard is properly initialized
-            current_leaderboard = leaderboard if isinstance(leaderboard, list) else []
-            
-            session_id = entry.get("session_id")
-            if not session_id:
-                logger.warning("Cannot update leaderboard: missing session_id")
-                return
-                
-            # Create a new list to avoid modifying the global during iteration
-            updated_leaderboard = list(current_leaderboard)
-            
-            # Check if this session is already in the leaderboard
-            existing_index = next(
-                (i for i, e in enumerate(updated_leaderboard) 
-                 if e.get("session_id") == session_id),
-                None
-            )
-            
-            if existing_index is not None:
-                # Update existing entry
-                updated_leaderboard[existing_index] = entry
-            else:
-                # Add new entry
-                updated_leaderboard.append(entry)
-                
-            # Sort and keep top 100 entries
-            updated_leaderboard.sort(key=lambda x: float(x.get("total_score", 0)), reverse=True)
-            
-            # Update the global leaderboard
-            leaderboard = updated_leaderboard[:100]
+            logger.debug("Leaderboard update requested for session %s", entry.get("session_id"))
+            # No action needed as leaderboard is now managed by the database
+            pass
             
         except Exception as e:
-            logger.error("Error updating leaderboard: %s", e, exc_info=True)
-            raise
-            
-    def _update_ranking_service(self, session: Dict[str, Any], score: float) -> None:
-        """Update the ranking service with the final score.
-        
-        Args:
-            session: The game session data
-            score: The final score to record
-        """
-        try:
-            ranking_service.update_ranking(
-                session_id=session.get("session_id", ""),
-                nickname=session.get("nickname", ""),
-                score=score,
-                user_type=session.get("user_type", UserType.THINKING).value
-            )
-            logger.debug("Successfully updated ranking service")
-            # Try to get rankings directly from the file
-            try:
-                ranking_file = os.path.join(ranking_service.data_dir, 'rankings.json')
-                print(f"Checking ranking file at: {ranking_file}")
-                if os.path.exists(ranking_file):
-                    with open(ranking_file, 'r') as f:
-                        file_content = f.read()
-                        print(f"Ranking file content: {file_content}")
-                else:
-                    print("Ranking file does not exist")
-            except Exception as e:
-                print(f"Error reading ranking file: {e}")
-                
-        except Exception as e:
-            print(f"Error updating ranking: {e}")
-            import traceback
-            traceback.print_exc()
-        
+            logger.error("Error in leaderboard update: %s", str(e), exc_info=True)
+            # Don't raise to avoid disrupting game flow
+            pass
+
         global leaderboard
         try:
             if isinstance(leaderboard, list):
@@ -805,42 +889,59 @@ class GameService:
             raise ValueError("Invalid user type")
             
         return "F" if user_type == UserType.THINKING else "T"
-    
     def _generate_feedback(self, session: Dict[str, Any], total_score: float) -> str:
         """Generate personalized feedback based on the game results.
         
         Args:
-            session: The game session data
+            session: The game session data (can be a dict or DB model)
             total_score: The player's total score
             
         Returns:
             str: Personalized feedback message in Korean
         """
         try:
-            user_type = session.get("user_type")
-            if not isinstance(user_type, UserType):
-                logger.warning("Invalid user type in session: %s", user_type)
-                return "게임 결과를 분석 중입니다. 나중에 다시 시도해주세요."
-                
-            target_style = self._get_opposite_style(user_type)
+            # Handle both dict and SQLAlchemy model
+            if hasattr(session, 'user_type'):
+                # It's a SQLAlchemy model
+                user_type = session.user_type
+                scores = session.scores if hasattr(session, 'scores') else []
+            else:
+                # It's a dict
+                user_type = session.get("user_type", "T")  # Default to 'T' if not specified
+                scores = session.get("scores", [])
             
-            # Define feedback tiers
-            feedback_tiers = [
-                (80, f"훌륭해요! {target_style} 스타일을 매우 잘 이해하고 계시네요!"),
-                (60, f"잘 하셨습니다! {target_style} 스타일을 이해하는 데 도움이 될 거예요."),
-                (0, f"조금 더 연습이 필요해요. {target_style} 스타일을 이해하는 데 집중해보세요!")
-            ]
+            # Calculate average score per round
+            num_rounds = len(scores)
+            avg_score = total_score / num_rounds if num_rounds > 0 else 0
             
-            # Find the appropriate feedback message
-            for threshold, message in feedback_tiers:
-                if total_score >= threshold:
-                    return message
-                    
-            return "게임 결과를 분석 중입니다."
-            
+            # Determine feedback based on average score
+            if avg_score >= 75:
+                if user_type == "T" or user_type == UserType.THINKING:
+                    return ("당신은 T 유형으로서 F 유형의 감정을 정말 잘 이해하고 있어요! "
+                            "상대방의 감정에 공감하는 능력이 뛰어나네요.")
+                else:
+                    return ("당신은 F 유형으로서 T 유형의 사고 방식을 정말 잘 이해하고 있어요! "
+                            "논리적인 사고에 대한 이해도가 높으시네요.")
+                            
+            elif avg_score >= 50:
+                if user_type == "T" or user_type == UserType.THINKING:
+                    return ("T 유형으로서 F 유형의 감정을 잘 이해하고 계세요. "
+                            "약간의 연습만 더 하면 더 나은 결과를 얻을 수 있을 거예요!")
+                else:
+                    return ("F 유형으로서 T 유형의 사고 방식을 잘 이해하고 계세요. "
+                            "조금 더 연습하면 더 나은 결과를 얻을 수 있을 거예요!")
+                            
+            else:
+                if user_type == "T" or user_type == UserType.THINKING:
+                    return ("T 유형으로서 F 유형의 감정을 이해하는 데 조금 어려움이 있으신 것 같아요. "
+                            "상대방의 감정에 더 공감하려는 노력이 필요해 보여요.")
+                else:
+                    return ("F 유형으로서 T 유형의 사고 방식을 이해하는 데 조금 어려움이 있으신 것 같아요. "
+                            "논리적인 사고에 대한 이해를 높이기 위해 노력해보세요!")
+                            
         except Exception as e:
-            logger.error("Error generating feedback: %s", e, exc_info=True)
-            return "피드백을 생성하는 중에 오류가 발생했습니다."
+            logger.error("Error generating feedback: %s", str(e), exc_info=True)
+            return "게임 결과에 대한 피드백을 생성하는 중 오류가 발생했습니다."
 
     def _save_game_stats(self) -> None:
         """

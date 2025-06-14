@@ -1,4 +1,8 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends, status
+
+# Configure logging
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Any
 import uuid
 from app.services.game_service import game_service
@@ -7,7 +11,8 @@ from app.schemas import (
     RoundResponse, 
     ScoreRequest, 
     GameSummary,
-    ErrorResponse
+    ErrorResponse,
+    UserType
 )
 
 router = APIRouter(
@@ -15,8 +20,6 @@ router = APIRouter(
     tags=["game"],
     responses={404: {"description": "Not found"}},
 )
-
-
 
 @router.post("/start", response_model=dict)
 async def start_game(request: GameStartRequest):
@@ -29,11 +32,17 @@ async def start_game(request: GameStartRequest):
     Returns a session ID to be used for subsequent requests.
     """
     try:
-        session_id = game_service.start_game(
+        # Pass the raw string value to the service
+        session_id = await game_service.start_game(
             nickname=request.nickname,
-            user_type=request.user_type
+            user_type=request.user_type.value  # Pass the raw string value ("T" or "F")
         )
         return {"session_id": session_id, "message": "Game started successfully"}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid user_type. Must be one of: {[t.value for t in UserType]}"
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -43,6 +52,8 @@ async def get_round(round_number: int):
     Get the situation and example response for a specific round.
     
     - **round_number**: The round number (1-5)
+    
+    Returns the round details including the situation and example response.
     """
     try:
         round_info = game_service.get_round(round_number)
@@ -52,7 +63,7 @@ async def get_round(round_number: int):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/score", response_model=dict)
+@router.post("/submit", response_model=dict)
 async def submit_score(request: ScoreRequest):
     """
     Submit a response for a round and get the score.
@@ -60,16 +71,18 @@ async def submit_score(request: ScoreRequest):
     - **session_id**: The game session ID
     - **user_response**: The user's response text
     - **round_number**: The round number (1-5)
+    
+    Returns the score and round information.
     """
     try:
-        score = game_service.submit_response(
+        result = await game_service.submit_response(
             session_id=request.session_id,
             user_response=request.user_response,
             round_number=request.round_number
         )
-        return {"score": score, "message": "Response scored successfully"}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        if not result:
+            raise HTTPException(status_code=404, detail="Session not found or round already completed")
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -79,10 +92,15 @@ async def get_summary(session_id: str):
     Get the game summary including scores and leaderboard position.
     
     - **session_id**: The game session ID
+    
+    Returns the game summary with scores and rankings.
     """
     try:
-        return game_service.get_summary(session_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        # Await the async get_summary method
+        summary = await game_service.get_summary(session_id)
+        if not summary:
+            raise HTTPException(status_code=404, detail="Session not found or game not completed")
+        return summary
     except Exception as e:
+        logger.error(f"Error getting game summary: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
