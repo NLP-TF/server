@@ -19,7 +19,7 @@ numpy<2.0.0  # NumPy 2.x 호환성 문제로 1.x 버전 고정
 torch==2.2.0
 transformers==4.36.2
 huggingface-hub==0.25.0
-sentencepiece==0.1.99  # transformers 의존성
+sentencepiece>=0.1.99  # transformers 의존성
 
 # Testing
 pytest==7.4.4
