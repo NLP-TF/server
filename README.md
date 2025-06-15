@@ -49,10 +49,7 @@ python3 -m venv venv
 source venv/bin/activate  # Windows: .\venv\Scripts\activate
 
 # 의존성 설치
-pip install -r requirements.txt
-
-# 추가 의존성 설치 (만약 requirements.txt에 없을 경우)
-pip install torch transformers peft
+pip3 install -r requirements.txt
 ```
 
 ### 3. 서버 실행
