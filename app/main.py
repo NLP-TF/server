@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # Initialize the FastAPI application with lifespan
 app = FastAPI(
     title="MBTI Game API",
-    description="API for MBTI-based T/F style classification game",
+    description="MBTI Game API Server",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -85,6 +85,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from app.models.load_model import load_model_and_tokenizer
+import logging
+
+logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup_event():
+    """서버 시작 시 모델을 로딩합니다."""
+    logger.info("🚀 Starting server...")
+    try:
+        load_model_and_tokenizer()
+        logger.info("✅ Model and tokenizer loaded successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to load model: {str(e)}", exc_info=True)
+        raise
 
 # Include routers
 app.include_router(game_router.router)

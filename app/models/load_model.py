@@ -9,6 +9,7 @@ import time
 from typing import Dict, Any, Optional, Tuple
 from transformers import BertModel, BertForSequenceClassification, AutoTokenizer
 import torch.nn.functional as F
+from functools import lru_cache
 
 # Configure logging
 logging.basicConfig(
@@ -414,20 +415,20 @@ def get_tokenizer():
     return tokenizer
 
 
+@lru_cache(maxsize=1)
 def get_model_and_tokenizer():
     """
     Get both model and tokenizer instances.
-
+    
     Returns:
         Tuple of (model, tokenizer)
     """
-    logger.debug("🔍 Getting both model and tokenizer instances...")
-    load_models_if_needed()
-
+    global model, tokenizer
+    
     if model is None or tokenizer is None:
         error_msg = f"❌ Model or tokenizer not available (model: {model is not None}, tokenizer: {tokenizer is not None})"
         logger.error(error_msg)
         raise ValueError(error_msg)
-
+        
     logger.debug("✅ Both model and tokenizer instances retrieved successfully")
     return model, tokenizer
