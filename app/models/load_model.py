@@ -44,7 +44,7 @@ def log_system_info():
 
 
 # Log system info when module is loaded
-log_system_info()
+# log_system_info()  # 주석 처리 - 필요할 때만 명시적으로 호출하세요
 
 
 class KoBERT_TF_Model(nn.Module):
