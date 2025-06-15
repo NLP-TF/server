@@ -1,8 +1,6 @@
 import os
 
-os.environ["HF_HOME"] = (
-    "/tmp/huggingface"  # Railway 등 컨테이너 환경에서 캐시 경로 권장
-)
+os.environ["HF_HOME"] = "/tmp/huggingface"  # For Railway or similar environments
 
 import sys
 import torch
@@ -15,71 +13,19 @@ from typing import Dict
 from transformers import BertModel, AutoTokenizer
 from functools import lru_cache
 
-# Configure logging
+# Logging setup
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - app.models.load_model - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("model_loading.log"),
     ],
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app.models.load_model")
 
-# Global variables for model and tokenizer
+# Globals for model and tokenizer
 model = None
 tokenizer = None
-
-
-def log_system_info():
-    """Log system and environment information"""
-    logger.info("=" * 50)
-    logger.info("System Information")
-    logger.info("=" * 50)
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"System: {platform.system()} {platform.release()}")
-    logger.info(f"Processor: {platform.processor()}")
-    logger.info(f"PyTorch version: {torch.__version__}")
-    logger.info(f"CUDA available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        logger.info(f"CUDA version: {torch.version.cuda}")
-        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
-    logger.info(f"RAM: {psutil.virtual_memory().total / (1024**3):.2f} GB")
-    logger.info("=" * 50 + "\n")
-
-
-class KoBERT_TF_Model(nn.Module):
-    def __init__(
-        self, hidden_size=768, num_classes=2, situation_dim=64, num_situations=7
-    ):
-        super().__init__()
-        # Load base BERT model
-        self.bert = BertModel.from_pretrained("monologg/kobert")
-        # Situation embedding with smaller dimension
-        self.situ_embed = nn.Embedding(num_situations, situation_dim)
-        # Classifier with late fusion architecture
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_size + situation_dim, 256),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes),
-        )
-
-    def forward(self, input_ids, attention_mask, situation_id=None):
-        bert_out = self.bert(
-            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
-        )
-        cls_vec = bert_out.last_hidden_state[:, 0, :]
-        if situation_id is not None:
-            situ_vec = self.situ_embed(situation_id)
-            combined = torch.cat([cls_vec, situ_vec.squeeze(1)], dim=1)
-            return self.classifier(combined)
-        else:
-            batch_size = cls_vec.size(0)
-            device = cls_vec.device
-            situ_vec = torch.zeros(batch_size, 64, device=device)
-            combined = torch.cat([cls_vec, situ_vec], dim=1)
-            return self.classifier(combined)
 
 
 def log_memory_usage(stage: str = ""):
@@ -102,6 +48,37 @@ def log_gpu_info(stage: str = ""):
             f"Allocated: {gpu_mem:.2f}MB | "
             f"Reserved: {gpu_mem_reserved:.2f}MB"
         )
+
+
+class KoBERT_TF_Model(nn.Module):
+    def __init__(
+        self, hidden_size=768, num_classes=2, situation_dim=64, num_situations=7
+    ):
+        super().__init__()
+        self.bert = BertModel.from_pretrained("monologg/kobert")
+        self.situ_embed = nn.Embedding(num_situations, situation_dim)
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size + situation_dim, 256),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, num_classes),
+        )
+
+    def forward(self, input_ids, attention_mask, situation_id=None):
+        bert_out = self.bert(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+        )
+        cls_vec = bert_out.last_hidden_state[:, 0, :]
+        if situation_id is not None:
+            situ_vec = self.situ_embed(situation_id)
+            combined = torch.cat([cls_vec, situ_vec.squeeze(1)], dim=1)
+            return self.classifier(combined)
+        else:
+            batch_size = cls_vec.size(0)
+            device = cls_vec.device
+            situ_vec = torch.zeros(batch_size, 64, device=device)
+            combined = torch.cat([cls_vec, situ_vec], dim=1)
+            return self.classifier(combined)
 
 
 def load_model_and_tokenizer():
@@ -186,47 +163,15 @@ def load_model_and_tokenizer():
             logger.info("✅ Model weights loaded and set to evaluation mode.")
 
         except Exception as e:
-            logger.error(f"❌ Test prediction failed: {str(e)}", exc_info=True)
-            # model = None  # <- 이 줄 제거!
-            # tokenizer = None  # <- 이 줄 제거!
-            # raise 또는 sys.exit(1) 중 택1
-            # raise
+            logger.error(f"❌ Error loading model weights: {str(e)}", exc_info=True)
+            model = None
+            tokenizer = None
             sys.exit(1)
 
         log_memory_usage("After model load")
         log_gpu_info("After model load")
 
-        # 5. Run test prediction (실패해도 전체 앱이 죽지 않게!)
-        logger.info("\n5. 🧪 Running test prediction...")
-        test_text = "테스트 문장입니다."
-        logger.info(f"Test input: '{test_text}'")
-
-        try:
-            inputs = tokenizer(
-                test_text,
-                return_tensors="pt",
-                padding="max_length",
-                truncation=True,
-                max_length=256,
-            )
-
-            device = next(model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-
-            with torch.no_grad():
-                logits = model(
-                    inputs["input_ids"],
-                    inputs["attention_mask"],
-                    situation_id=torch.tensor([6], device=device),
-                )
-                probs = torch.softmax(logits, dim=1).squeeze()
-                t_prob = float(probs[0]) * 100
-                f_prob = float(probs[1]) * 100
-                logger.info(f"✅ Test prediction - T: {t_prob:.2f}% | F: {f_prob:.2f}%")
-
-        except Exception as e:
-            logger.error(f"❌ Test prediction failed: {str(e)}", exc_info=True)
-            # 주의: 테스트 실패 시 raise하지 않음
+        # 🚨 test prediction 등은 절대 실행하지 말 것!
 
         logger.info("\n🎉 Model and tokenizer loaded successfully!")
         logger.info(f"⏱️  Total loading time: {time.time() - start_time:.2f} seconds")
@@ -239,6 +184,50 @@ def load_model_and_tokenizer():
     finally:
         log_memory_usage("After loading")
         log_gpu_info("After loading")
+
+
+def load_models_if_needed():
+    global model, tokenizer
+    logger.debug("🔍 Checking if models need to be loaded...")
+    if model is None or tokenizer is None:
+        logger.info("🔄 One or more models not loaded. Loading now...")
+        load_model_and_tokenizer()
+    else:
+        logger.debug("✅ Models are already loaded")
+
+
+def get_model():
+    logger.debug("🔍 Getting model instance...")
+    load_models_if_needed()
+    if model is None:
+        error_msg = "❌ Model is not available"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    logger.debug("✅ Model instance retrieved successfully")
+    return model
+
+
+def get_tokenizer():
+    logger.debug("🔍 Getting tokenizer instance...")
+    load_models_if_needed()
+    if tokenizer is None:
+        error_msg = "❌ Tokenizer is not available"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    logger.debug("✅ Tokenizer instance retrieved successfully")
+    return tokenizer
+
+
+@lru_cache(maxsize=1)
+def get_model_and_tokenizer():
+    global model, tokenizer
+    load_models_if_needed()
+    if model is None or tokenizer is None:
+        error_msg = f"❌ Model or tokenizer not available (model: {model is not None}, tokenizer: {tokenizer is not None})"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    logger.debug("✅ Both model and tokenizer instances retrieved successfully")
+    return model, tokenizer
 
 
 def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, str]:
@@ -317,47 +306,3 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         logger.error(f"💡 Input text that caused error: {text}")
         logger.error(f"💡 Situation: {situation}")
         raise
-
-
-def load_models_if_needed():
-    global model, tokenizer
-    logger.debug("🔍 Checking if models need to be loaded...")
-    if model is None or tokenizer is None:
-        logger.info("🔄 One or more models not loaded. Loading now...")
-        load_model_and_tokenizer()
-    else:
-        logger.debug("✅ Models are already loaded")
-
-
-def get_model():
-    logger.debug("🔍 Getting model instance...")
-    load_models_if_needed()
-    if model is None:
-        error_msg = "❌ Model is not available"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    logger.debug("✅ Model instance retrieved successfully")
-    return model
-
-
-def get_tokenizer():
-    logger.debug("🔍 Getting tokenizer instance...")
-    load_models_if_needed()
-    if tokenizer is None:
-        error_msg = "❌ Tokenizer is not available"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    logger.debug("✅ Tokenizer instance retrieved successfully")
-    return tokenizer
-
-
-@lru_cache(maxsize=1)
-def get_model_and_tokenizer():
-    global model, tokenizer
-    load_models_if_needed()
-    if model is None or tokenizer is None:
-        error_msg = f"❌ Model or tokenizer not available (model: {model is not None}, tokenizer: {tokenizer is not None})"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    logger.debug("✅ Both model and tokenizer instances retrieved successfully")
-    return model, tokenizer
