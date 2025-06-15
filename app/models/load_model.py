@@ -186,9 +186,11 @@ def load_model_and_tokenizer():
             logger.info("✅ Model weights loaded and set to evaluation mode.")
 
         except Exception as e:
-            logger.error(f"❌ Error loading model weights: {str(e)}", exc_info=True)
-            model = None
-            tokenizer = None
+            logger.error(f"❌ Test prediction failed: {str(e)}", exc_info=True)
+            # model = None  # <- 이 줄 제거!
+            # tokenizer = None  # <- 이 줄 제거!
+            # raise 또는 sys.exit(1) 중 택1
+            # raise
             sys.exit(1)
 
         log_memory_usage("After model load")
