@@ -72,18 +72,35 @@ curl -X POST http://127.0.0.1:8000/game/start \
   -d '{"nickname":"테스트유저", "user_type":"T"}'
 ```
 
-#### 라운드 정보 조회
+#### 라운드 정보 조회 (세션별 랜덤 시나리오)
+
+- 각 세션마다 5개의 중복 없는 랜덤 시나리오가 제공됩니다.
+- 반드시 게임 시작 후 받은 `session_id`와 라운드 번호(1~5)를 함께 요청해야 합니다.
 
 ```bash
-# 1라운드 정보 조회
-curl http://127.0.0.1:8000/game/round/1
+# 1라운드 정보 조회 예시 (세션 생성 후)
+curl http://127.0.0.1:8000/api/v1/game/round/{session_id}/1
+```
+
+- `{session_id}`는 게임 시작 시 응답받은 값을 사용하세요.
+- 응답 예시:
+
+```json
+{
+  "round_number": 1,
+  "situation": "친구가 시험에 떨어졌을 때",
+  "friend_message": "시험에 떨어졌어... 너무 속상해",
+  "example_response": ""
+}
 ```
 
 #### 응답 제출 및 점수 확인
 
+- 반드시 게임 시작 시 받은 session_id와 round_number를 사용하세요.
+- 한 라운드에 한 번만 응답이 허용됩니다.
+
 ```bash
-# 세션 ID는 게임 시작 시 받은 값을 사용하세요
-curl -X POST http://127.0.0.1:8000/game/score \
+curl -X POST http://127.0.0.1:8000/api/v1/game/submit \
   -H "Content-Type: application/json" \
   -d '{"session_id":"세션_ID", "user_response":"괜찮아? 다음에는 더 잘할 수 있을 거야!", "round_number":1}'
 ```
@@ -92,7 +109,7 @@ curl -X POST http://127.0.0.1:8000/game/score \
 
 ```bash
 # 세션 ID로 결과 조회
-curl http://127.0.0.1:8000/game/summary/세션_ID
+curl http://127.0.0.1:8000/api/v1/game/summary/세션_ID
 ```
 
 #### T/F 분류 모델 직접 테스트
