@@ -1,17 +1,25 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncEngine
 from sqlalchemy.orm import sessionmaker, declarative_base, scoped_session, Session
 from sqlalchemy.pool import NullPool
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
-from typing import Generator, AsyncGenerator
+from typing import Generator, AsyncGenerator, Optional
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/mbti_game")
+# Ensure DATABASE_URL has the correct asyncpg scheme
+def get_database_url() -> str:
+    url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/mbti_game")
+    # Ensure the URL uses asyncpg
+    if 'postgresql://' in url and '+asyncpg' not in url:
+        url = url.replace('postgresql://', 'postgresql+asyncpg://')
+    return url
+
+DATABASE_URL = get_database_url()
 
 # Async engine for async database operations
-engine = create_async_engine(
+engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=True,
     future=True,
@@ -22,9 +30,16 @@ engine = create_async_engine(
 # Alias for backward compatibility
 async_engine = engine
 
-# Sync engine for synchronous database operations
-SYNC_DATABASE_URL = DATABASE_URL.replace('+asyncpg', '')
-sync_engine = create_engine(SYNC_DATABASE_URL)
+def get_sync_engine():
+    """Get the sync engine, creating it if it doesn't exist."""
+    global sync_engine
+    if sync_engine is None:
+        sync_url = DATABASE_URL.replace('+asyncpg', '')
+        sync_engine = create_engine(sync_url)
+    return sync_engine
+
+# Initialize sync_engine as None - will be created on demand
+sync_engine = None
 
 # Session factory for async operations
 async_session_factory = async_sessionmaker(
@@ -64,11 +79,13 @@ def get_sync_db() -> Generator[Session, None, None]:
     Yields:
         Session: A database session
     """
-    db = SyncSessionLocal()
+    db = None
     try:
+        db = Session(get_sync_engine())
         yield db
     finally:
-        db.close()
+        if db:
+            db.close()
 
 Base = declarative_base()
 
@@ -77,22 +94,31 @@ async def init_db():
     
     This should be called on application startup.
     """
-    async with async_engine.begin() as conn:
-        # Create all tables
-        from app.db.models import GameSession, PlayerScore  # Import models to ensure they're registered with Base
+    # Import models to ensure they are registered with SQLAlchemy
+    from app.models.user import User
+    from app.models.game import GameSession, GameRound
+    
+    # Create all tables using async engine
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
+    
     # Also create tables in sync database for synchronous operations
-    Base.metadata.create_all(bind=sync_engine)
+    Base.metadata.create_all(bind=get_sync_engine())
+    print("Database tables created successfully")
 
 # Export commonly used names for backward compatibility
 __all__ = [
     'Base',
     'engine',
     'sync_engine',
-    'SessionLocal',
-    'SyncSessionLocal',
+    'async_engine',
     'get_db',
     'get_sync_db',
-    'init_db'
+    'get_sync_engine',
+    'init_db',
+    'async_session_factory',
+    'SessionLocal',
+    'SyncSessionLocal',
+    'AsyncSession',
+    'Session'
 ]

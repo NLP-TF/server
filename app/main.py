@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # Database
-from app.db.database import Base, engine, init_db, sync_engine
+from app.db.database import Base, engine, init_db, get_sync_engine
 
 # Routers
 from app.routers import game as game_router
@@ -23,10 +23,12 @@ load_dotenv()
 
 # Create database tables on startup
 async def create_tables():
+    # Create tables using async engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
     # Also create tables in sync database
-    Base.metadata.create_all(bind=sync_engine)
+    Base.metadata.create_all(bind=get_sync_engine())
 
 # Create data directory if it doesn't exist
 os.makedirs("data", exist_ok=True)
