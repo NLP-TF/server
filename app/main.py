@@ -19,7 +19,7 @@ from app.db.database import Base, engine, init_db, get_sync_engine
 from app.routers import game as game_router
 
 # Model utils (Lazy Loading)
-from app.models.load_model import load_models_if_needed
+from app.models.load_model import load_models_if_needed, predict_tf_style
 
 # Logging setup
 logger = logging.getLogger(__name__)
@@ -89,13 +89,16 @@ async def health():
 
 
 # Lazy model loading: 실제 예측 등에서 최초 호출시만 모델 로딩
+class PredictRequest(BaseModel):
+    text: str
+    situation: Optional[str] = "친구_갈등"
+
+
 @app.post("/predict")
-async def predict(text: str, situation: Optional[str] = "친구_갈등"):
+async def predict(req: PredictRequest):
     try:
         load_models_if_needed()
-        from app.models.load_model import predict_tf_style
-
-        result = predict_tf_style(text, situation)
+        result = predict_tf_style(req.text, req.situation)
         return {"result": result}
     except Exception as e:
         logger.error(f"Prediction failed: {e}", exc_info=True)
