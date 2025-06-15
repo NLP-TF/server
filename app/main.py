@@ -1,16 +1,16 @@
-# app/main.py
-
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, AsyncGenerator
-import uvicorn
-from contextlib import asynccontextmanager
+from typing import Optional
+import logging
+
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 # Database
 from app.db.database import Base, engine, init_db, get_sync_engine
@@ -18,19 +18,14 @@ from app.db.database import Base, engine, init_db, get_sync_engine
 # Routers
 from app.routers import game as game_router
 
+# Model utils (Lazy Loading)
+from app.models.load_model import load_models_if_needed
+
+# Logging setup
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
-
-
-# Create database tables on startup
-async def create_tables():
-    # Create tables using async engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Also create tables in sync database
-    Base.metadata.create_all(bind=get_sync_engine())
-
 
 # Create data directory if it doesn't exist
 os.makedirs("data", exist_ok=True)
@@ -44,26 +39,24 @@ def initialize_stats() -> None:
             json.dump({"leaderboard": [], "total_games": 0}, f)
 
 
+async def create_tables():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    Base.metadata.create_all(bind=get_sync_engine())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Create database tables
     await create_tables()
     print("✅ Database tables created")
-
     # Initialize stats
     initialize_stats()
-
-    # Load initial data or perform startup events
-    # For example, load ML models, connect to databases, etc.
-
     yield
-
-    # Clean up resources on shutdown
-    # For example, close database connections, etc.
     await engine.dispose()
 
 
-# Initialize the FastAPI application with lifespan
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="MBTI Game API",
     description="MBTI Game API Server",
@@ -73,8 +66,6 @@ app = FastAPI(
 
 # Add middleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# CORS middleware
 origins = [
     "http://localhost",
     "http://localhost:3000",
@@ -82,7 +73,6 @@ origins = [
     "http://127.0.0.1:3000",
     "https://your-production-domain.com",
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -91,31 +81,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.models.load_model import load_model_and_tokenizer
-import logging
 
-logger = logging.getLogger(__name__)
-
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("🚀 Starting server... (Model load begins)")
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, load_model_and_tokenizer)
-    logger.info("✅ Model and tokenizer loaded successfully")
+# Healthcheck endpoint
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
-# Include routers
+# Lazy model loading: 실제 예측 등에서 최초 호출시만 모델 로딩
+@app.post("/predict")
+async def predict(text: str, situation: Optional[str] = "친구_갈등"):
+    try:
+        load_models_if_needed()
+        from app.models.load_model import predict_tf_style
+
+        result = predict_tf_style(text, situation)
+        return {"result": result}
+    except Exception as e:
+        logger.error(f"Prediction failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Include game router
 app.include_router(game_router.router)
 
 
-# Example route
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to the MBTI Game API"}
 
 
-# Sample data model
+# Sample Item model and routes for demonstration
 class Item(BaseModel):
     name: str
     description: Optional[str] = None
@@ -123,7 +119,6 @@ class Item(BaseModel):
     tax: Optional[float] = None
 
 
-# Sample routes (can be removed if not needed)
 items_db = []
 
 
@@ -146,4 +141,6 @@ async def read_item(item_id: int):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    import uvicorn
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
