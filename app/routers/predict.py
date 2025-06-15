@@ -10,6 +10,7 @@ router = APIRouter(
 
 class PredictRequest(BaseModel):
     text: str
+    situation: str = "친구_갈등"  # Default to "친구_갈등" if not provided
 
 @router.post("/predict")
 def predict(request: PredictRequest):
@@ -18,5 +19,5 @@ def predict(request: PredictRequest):
     
     - **text**: The input text to analyze
     """
-    result = predict_tf_style(request.text)
+    result = predict_tf_style(request.text, situation=request.situation)
     return {"input": request.text, "result": result}

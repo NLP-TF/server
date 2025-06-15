@@ -4,6 +4,178 @@
 
 ---
 
+## 📚 API Documentation
+
+### Base URL
+
+```
+http://localhost:8000
+```
+
+### Authentication
+
+Most endpoints require authentication. Include the access token in the request headers:
+
+```
+Authorization: Bearer <your_access_token>
+```
+
+### Endpoints
+
+#### 1. Authentication
+
+**POST /api/auth/token**
+
+Get access token for authentication.
+
+```http
+POST /api/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=testuser&password=testpass
+```
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+#### 2. Game Sessions
+
+**POST /api/game/start**
+
+Start a new game session.
+
+```http
+POST /api/game/start
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "player_name": "Player1",
+  "difficulty": "medium"
+}
+```
+
+**Response:**
+
+```json
+{
+  "session_id": "abc123",
+  "scenario": "You find a wallet on the street. What do you do?",
+  "options": ["Keep it", "Try to find the owner"],
+  "current_round": 1,
+  "total_rounds": 5
+}
+```
+
+**POST /api/game/answer**
+
+Submit an answer for the current round.
+
+```http
+POST /api/game/answer
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "session_id": "abc123",
+  "answer": "Keep it"
+}
+```
+
+**Response:**
+
+```json
+{
+  "result": "T",
+  "explanation": "Your choice suggests a preference for Thinking over Feeling.",
+  "next_scenario": "Your colleague takes credit for your work...",
+  "options": ["Confront them", "Let it go this time"],
+  "current_round": 2,
+  "completed": false
+}
+```
+
+#### 3. Leaderboard
+
+**GET /api/leaderboard**
+
+Get the current leaderboard.
+
+```http
+GET /api/leaderboard
+Authorization: Bearer <token>
+```
+
+**Response:**
+
+```json
+{
+  "leaderboard": [
+    {
+      "rank": 1,
+      "player_name": "MBTI_Master",
+      "score": 950,
+      "mbti_type": "INTJ"
+    },
+    {
+      "rank": 2,
+      "player_name": "Thinker123",
+      "score": 890,
+      "mbti_type": "INTP"
+    }
+  ]
+}
+```
+
+#### 4. User Profile
+
+**GET /api/users/me**
+
+Get current user's profile and stats.
+
+```http
+GET /api/users/me
+Authorization: Bearer <token>
+```
+
+**Response:**
+
+```json
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "games_played": 5,
+  "highest_score": 850,
+  "average_score": 720,
+  "frequent_mbti": "INTJ"
+}
+```
+
+### Error Responses
+
+All error responses follow this format:
+
+```json
+{
+  "detail": "Error message here"
+}
+```
+
+#### Common Error Status Codes
+
+- `400 Bad Request`: Invalid request data
+- `401 Unauthorized`: Missing or invalid authentication
+- `403 Forbidden`: Insufficient permissions
+- `404 Not Found`: Resource not found
+- `422 Unprocessable Entity`: Validation error
+- `500 Internal Server Error`: Server error
+
 ## 🚀 빠른 시작
 
 ### 1. Set Up PostgreSQL

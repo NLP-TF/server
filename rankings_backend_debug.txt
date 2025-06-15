@@ -1,0 +1,4 @@
+rankings_file: data/rankings.json
+rankings_file.exists: True
+rankings_file.parent: data
+rankings_file.parent.exists: True

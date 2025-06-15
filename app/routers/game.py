@@ -70,6 +70,7 @@ async def submit_score(request: ScoreRequest):
     - **session_id**: The game session ID
     - **user_response**: The user's response text
     - **round_number**: The round number (1-5)
+    - **situation**: The situation label (e.g., "연인_갈등", "친구_갈등")
     
     Returns the score and round information.
     """
@@ -77,7 +78,8 @@ async def submit_score(request: ScoreRequest):
         result = await game_service.submit_response(
             session_id=request.session_id,
             user_response=request.user_response,
-            round_number=request.round_number
+            round_number=request.round_number,
+            situation=request.situation  # Pass the situation to the service
         )
         if not result:
             raise HTTPException(status_code=404, detail="Session not found or round already completed")

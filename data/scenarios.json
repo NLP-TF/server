@@ -1,198 +1,102 @@
 [
   {
-    "situation": "중요한 발표에서 실수했을 때",
+    "situation": "실수_자책",
+    "situation_detail": "중요한 발표에서 실수했을 때",
     "friend_message": "발표 중에 머리가 하얘져서 아무 말도 못했어… 너무 창피해"
   },
   {
-    "situation": "친구와 심하게 다퉜을 때",
+    "situation": "친구_갈등",
+    "situation_detail": "친구와 심하게 다퉜을 때",
     "friend_message": "진짜 친했던 친구랑 싸웠는데, 이번엔 진짜 끝일 것 같아"
   },
   {
-    "situation": "연인과 헤어진 직후",
+    "situation": "연인_갈등",
+    "situation_detail": "연인과 헤어진 직후",
     "friend_message": "방금 전 남자친구랑 헤어졌어… 아직 실감도 안 나"
   },
   {
-    "situation": "취업 면접에서 떨어졌을 때",
+    "situation": "직장_갈등",
+    "situation_detail": "취업 면접에서 떨어졌을 때",
     "friend_message": "정말 가고 싶었던 회사 면접에서 떨어졌어… 자신감이 다 사라졌어"
   },
   {
-    "situation": "가족과 심하게 갈등을 겪었을 때",
+    "situation": "가족_갈등",
+    "situation_detail": "가족과 심하게 갈등을 겪었을 때",
     "friend_message": "엄마랑 너무 크게 싸웠어. 나 진짜 너무 지쳐"
   },
   {
-    "situation": "시험에서 예상보다 낮은 점수를 받았을 때",
-    "friend_message": "진짜 열심히 했는데 점수가 너무 낮게 나왔어… 나 잘못된 길 가고 있는 걸까?"
-  },
-  {
-    "situation": "친구가 자신을 배신했다고 느낄 때",
+    "situation": "친구_갈등",
+    "situation_detail": "친구가 자신을 배신했다고 느낄 때",
     "friend_message": "내가 제일 믿었던 친구가 나한테 그런 말을 했어… 너무 배신감 들어"
   },
   {
-    "situation": "반려동물을 잃었을 때",
-    "friend_message": "우리 강아지가 오늘 하늘나라로 갔어… 집이 너무 조용해"
-  },
-  {
-    "situation": "건강에 이상이 생겼을 때",
-    "friend_message": "병원에서 검사 결과가 좀 안 좋게 나왔어… 무서워"
-  },
-  {
-    "situation": "자신의 선택에 대한 후회가 클 때",
-    "friend_message": "그때 그 선택만 안 했어도 지금 이렇게 괴롭진 않았을 텐데…"
-  },
-  {
-    "situation": "팀 프로젝트에서 배제당했다고 느낄 때",
+    "situation": "직장_갈등",
+    "situation_detail": "팀 프로젝트에서 배제당했다고 느낄 때",
     "friend_message": "회의 때 아무도 내 의견을 듣지 않았어. 나 그냥 없는 사람 같았어"
   },
   {
-    "situation": "회사에서 해고 통보를 받았을 때",
+    "situation": "직장_갈등",
+    "situation_detail": "회사에서 해고 통보를 받았을 때",
     "friend_message": "오늘 회사에서 해고 통보를 받았어… 뭘 어떻게 해야 할지 모르겠어"
   },
   {
-    "situation": "이직을 실패했을 때",
-    "friend_message": "이직 준비 정말 열심히 했는데 다 떨어졌어… 내 커리어가 망가진 기분이야"
-  },
-  {
-    "situation": "학교에서 왕따를 당했을 때",
-    "friend_message": "요즘 학교에서 애들이 나만 빼고 단톡방 만들었더라… 너무 속상해"
-  },
-  {
-    "situation": "성적 장학금을 놓쳤을 때",
-    "friend_message": "한 문제만 더 맞췄으면 장학금 받을 수 있었는데… 너무 아쉬워"
-  },
-  {
-    "situation": "오랜 꿈을 포기해야 할 때",
+    "situation": "미래_고민",
+    "situation_detail": "오랜 꿈을 포기해야 할 때",
     "friend_message": "이제 그 꿈은 접어야 할 것 같아… 더 이상 현실적으로 가능하지 않다고 느껴"
   },
   {
-    "situation": "중요한 대회에서 실격당했을 때",
+    "situation": "실수_자책",
+    "situation_detail": "중요한 대회에서 실격당했을 때",
     "friend_message": "몇 달을 준비했는데, 실수 하나로 실격당했어… 자책감이 너무 커"
   },
   {
-    "situation": "친구에게 상처되는 말을 들었을 때",
+    "situation": "친구_갈등",
+    "situation_detail": "친구에게 상처되는 말을 들었을 때",
     "friend_message": "친구가 농담이라 했지만 나에겐 진짜 상처였어"
   },
   {
-    "situation": "자존감이 바닥일 때",
-    "friend_message": "내가 왜 이렇게까지 못났는지 모르겠어… 모든 게 부정적으로 느껴져"
-  },
-  {
-    "situation": "이별 후 마음이 무너질 때",
-    "friend_message": "헤어진 지 꽤 됐는데도 아직 매일 밤 울어… 너무 힘들어"
-  },
-  {
-    "situation": "나쁜 소문에 휘말렸을 때",
-    "friend_message": "나에 대한 이상한 소문이 퍼졌어… 아무에게도 말 못했는데 억울해"
-  },
-  {
-    "situation": "가족이 큰 병에 걸렸을 때",
+    "situation": "가족_갈등",
+    "situation_detail": "가족이 큰 병에 걸렸을 때",
     "friend_message": "아빠가 큰 병에 걸리셨대… 겉으론 괜찮은 척하지만 진짜 무서워"
   },
   {
-    "situation": "장기간 취업 준비로 지쳤을 때",
-    "friend_message": "몇 년째 취준 중인데 자꾸 떨어지니까 내가 부족한 사람 같아"
-  },
-  {
-    "situation": "경제적으로 너무 힘들 때",
-    "friend_message": "통장 잔고를 봤는데 이제 진짜 생계가 막막해"
-  },
-  {
-    "situation": "자신의 정체성을 이해받지 못할 때",
-    "friend_message": "내가 누구인지 말했더니 다들 이상하게 봐… 너무 외로워"
-  },
-  {
-    "situation": "SNS에서 악플을 받았을 때",
-    "friend_message": "내 글 하나 올렸을 뿐인데 이상한 사람들이 달려와서 상처 주는 말을 해"
-  },
-  {
-    "situation": "첫 이별을 겪었을 때",
+    "situation": "연인_갈등",
+    "situation_detail": "첫 이별을 겪었을 때",
     "friend_message": "처음으로 사랑했던 사람과 이별했어… 어떻게 극복해야 할지 모르겠어"
   },
   {
-    "situation": "믿었던 사람이 떠났을 때",
-    "friend_message": "내가 제일 의지했던 사람이 이젠 곁에 없어… 허전함이 너무 커"
-  },
-  {
-    "situation": "기대했던 결과가 무산됐을 때",
-    "friend_message": "기대 많이 했던 프로젝트가 엎어졌어… 허무하고 속상해"
-  },
-  {
-    "situation": "창업 실패를 경험했을 때",
-    "friend_message": "모든 걸 걸었는데 사업이 망했어… 다시 일어설 수 있을까?"
-  },
-  {
-    "situation": "이사 후 외로움을 느낄 때",
-    "friend_message": "새로운 동네에 왔는데 아는 사람이 없으니까 너무 외로워"
-  },
-  {
-    "situation": "시험 당일 컨디션이 안 좋았을 때",
-    "friend_message": "몸이 안 좋은데도 시험을 봤어… 제 실력을 못 보여준 게 너무 아쉬워"
-  },
-  {
-    "situation": "좋아하던 사람이 떠날 때",
-    "friend_message": "좋아했던 사람이 유학 간대… 고백도 못 했는데"
-  },
-  {
-    "situation": "자기 비판이 심할 때",
-    "friend_message": "다른 사람들은 다 잘하는데 나만 왜 이럴까 자꾸 비교하게 돼"
-  },
-  {
-    "situation": "실수 후 주변 시선을 의식할 때",
+    "situation": "실수_자책",
+    "situation_detail": "실수 후 주변 시선을 의식할 때",
     "friend_message": "작은 실수 하나 했는데 다들 나를 그렇게 쳐다보는 것 같아"
   },
   {
-    "situation": "과거의 트라우마가 떠오를 때",
-    "friend_message": "예전 일인데도 가끔 그때가 생각나면 숨이 안 쉬어져"
-  },
-  {
-    "situation": "실연 후 자존감이 낮아졌을 때",
-    "friend_message": "그 사람은 나보다 훨씬 좋은 사람 만날 거야… 나한텐 뭐가 부족했을까"
-  },
-  {
-    "situation": "성별 혹은 외모로 차별받았을 때",
+    "situation": "친구_갈등",
+    "situation_detail": "성별 혹은 외모로 차별받았을 때",
     "friend_message": "그냥 여자라는 이유로 무시당한 기분이야"
   },
   {
-    "situation": "첫 직장에서 버티기 힘들 때",
+    "situation": "직장_갈등",
+    "situation_detail": "첫 직장에서 버티기 힘들 때",
     "friend_message": "첫 회사인데 너무 지치고 매일 울고 싶어"
   },
   {
-    "situation": "누군가에게 실망했을 때",
+    "situation": "실수_자책",
+    "situation_detail": "누군가에게 실망했을 때",
     "friend_message": "믿었던 사람에게 실망했어… 그냥 아무에게도 기대고 싶지 않아"
   },
   {
-    "situation": "꿈을 말했는데 무시당했을 때",
-    "friend_message": "내가 하고 싶은 걸 말했는데 다들 비웃었어"
-  },
-  {
-    "situation": "감정 표현이 서툴러서 오해받았을 때",
+    "situation": "친구_갈등",
+    "situation_detail": "감정 표현이 서툴러서 오해받았을 때",
     "friend_message": "내가 표현을 잘 못해서 사람들이 나를 오해하는 것 같아"
   },
   {
-    "situation": "혼자 있는 시간이 너무 외로울 때",
-    "friend_message": "주말 내내 혼자였어… 누구라도 나 좀 알아줬으면 좋겠어"
-  },
-  {
-    "situation": "장거리 연애 중 외로움을 느낄 때",
-    "friend_message": "자주 못 보니까 점점 멀어지는 느낌이야… 그 사람도 힘들겠지?"
-  },
-  {
-    "situation": "좋은 결과를 기대했는데 아쉬웠을 때",
-    "friend_message": "이번엔 진짜 잘 된 줄 알았는데 막상 결과 보니까 아니었어"
-  },
-  {
-    "situation": "가까운 사람에게 무시당했을 때",
+    "situation": "가족_갈등",
+    "situation_detail": "가까운 사람에게 무시당했을 때",
     "friend_message": "내가 무슨 말만 하면 가족이 항상 무시해… 내가 틀린 말 한 것도 아닌데"
   },
   {
-    "situation": "자신을 이해해주는 사람이 없다고 느낄 때",
-    "friend_message": "이 세상에 나를 이해해주는 사람이 있긴 한 걸까?"
-  },
-  {
-    "situation": "오랜 친구와 멀어졌을 때",
+    "situation": "친구_갈등",
+    "situation_detail": "오랜 친구와 멀어졌을 때",
     "friend_message": "가장 친했던 친구랑 요즘엔 연락도 안 해… 점점 멀어지는 느낌이야"
-  },
-  {
-    "situation": "자신이 혼자라는 생각이 들 때",
-    "friend_message": "문득, 내가 정말 혼자인 것 같다는 생각이 들어서 울었어"
   }
 ]

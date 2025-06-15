@@ -13,6 +13,7 @@ class GameStartRequest(BaseModel):
 class RoundResponse(BaseModel):
     round_number: int
     situation: str
+    situation_detail: str
     friend_message: str
     example_response: str
 
@@ -20,9 +21,11 @@ class ScoreRequest(BaseModel):
     session_id: str
     user_response: str
     round_number: int
+    situation: str  # e.g., "연인_갈등", "친구_갈등"
 
 class RoundScore(BaseModel):
     round_number: int
+    situation: str  # e.g., "연인_갈등", "친구_갈등"
     score: float
     user_response: str
     is_correct_style: bool

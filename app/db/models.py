@@ -23,6 +23,8 @@ class PlayerScore(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String, ForeignKey("game_sessions.id", ondelete="CASCADE"))
     round_number = Column(Integer, nullable=False)
+    situation = Column(String, nullable=False)  # e.g., "연인_갈등", "친구_갈등"
+    situation_detail = Column(String, nullable=True)  # Detailed description of the situation
     user_response = Column(String, nullable=False)
     is_correct_style = Column(Boolean, nullable=False)
     score = Column(Float, nullable=False)

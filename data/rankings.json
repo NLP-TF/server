@@ -1,0 +1,32 @@
+{
+  "Gina": {
+    "nickname": "Gina",
+    "total_score": 30.33,
+    "game_count": 1,
+    "user_type": "F"
+  },
+  "emily": {
+    "nickname": "emily",
+    "total_score": 348.7,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "daisy": {
+    "nickname": "daisy",
+    "total_score": 421.4,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "ai": {
+    "nickname": "ai",
+    "total_score": 278.2373607158661,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "hello": {
+    "nickname": "hello",
+    "total_score": 257.36095905303955,
+    "game_count": 1,
+    "user_type": "T"
+  }
+}

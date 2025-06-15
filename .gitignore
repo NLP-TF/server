@@ -45,5 +45,4 @@ env/
 
 # Model cache and data
 model_cache/
-data/
 test_data/
