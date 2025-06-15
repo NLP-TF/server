@@ -1,4 +1,9 @@
 import os
+
+os.environ["HF_HOME"] = (
+    "/tmp/huggingface"  # Railway 등 컨테이너 환경에서 캐시 경로 권장
+)
+
 import torch
 import torch.nn as nn
 import logging
@@ -44,10 +49,6 @@ def log_system_info():
     logger.info("=" * 50 + "\n")
 
 
-# Log system info when module is loaded
-# log_system_info()  # 주석 처리 - 필요할 때만 명시적으로 호출하세요
-
-
 class KoBERT_TF_Model(nn.Module):
     def __init__(
         self, hidden_size=768, num_classes=2, situation_dim=64, num_situations=7
@@ -55,10 +56,8 @@ class KoBERT_TF_Model(nn.Module):
         super().__init__()
         # Load base BERT model
         self.bert = BertModel.from_pretrained("monologg/kobert")
-
         # Situation embedding with smaller dimension
         self.situ_embed = nn.Embedding(num_situations, situation_dim)
-
         # Classifier with late fusion architecture
         self.classifier = nn.Sequential(
             nn.Linear(
@@ -74,10 +73,8 @@ class KoBERT_TF_Model(nn.Module):
         bert_out = self.bert(
             input_ids=input_ids, attention_mask=attention_mask, return_dict=True
         )
-
         # Get [CLS] token representation
         cls_vec = bert_out.last_hidden_state[:, 0, :]
-
         # Get situation embedding and concatenate with CLS vector
         if situation_id is not None:
             situ_vec = self.situ_embed(situation_id)
@@ -140,7 +137,7 @@ def load_model_and_tokenizer():
         tokenizer = AutoTokenizer.from_pretrained(
             "monologg/kobert",
             trust_remote_code=True,
-            force_download=False,  # 기본값은 False로 설정
+            force_download=False,
         )
         logger.info(f"✅ Tokenizer loaded. Type: {type(tokenizer).__name__}")
         log_memory_usage("After tokenizer load")
@@ -154,7 +151,7 @@ def load_model_and_tokenizer():
 
         # 3. Download model weights
         logger.info("\n3. ⬇️  Downloading model weights...")
-        from huggingface_hub import hf_hub_download, HfApi, HfFolder
+        from huggingface_hub import hf_hub_download
 
         # Log Hugging Face cache info
         cache_dir = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
@@ -173,7 +170,6 @@ def load_model_and_tokenizer():
         logger.info("\n4. 🔄 Loading model weights...")
         logger.info(f"Using device: {'cuda' if torch.cuda.is_available() else 'cpu'}")
 
-        # Load with error handling for state dict
         try:
             state_dict = torch.load(
                 model_path,
@@ -209,7 +205,7 @@ def load_model_and_tokenizer():
         log_memory_usage("After model load")
         log_gpu_info("After model load")
 
-        # 5. Run test prediction
+        # 5. Run test prediction (테스트 실패해도 전체 앱 crash 방지)
         logger.info("\n5. 🧪 Running test prediction...")
         test_text = "테스트 문장입니다."
         logger.info(f"Test input: '{test_text}'")
@@ -240,7 +236,7 @@ def load_model_and_tokenizer():
 
         except Exception as e:
             logger.error(f"❌ Test prediction failed: {str(e)}", exc_info=True)
-            raise
+            # raise하지 않고 에러만 로깅! (중요!)
 
         logger.info("\n🎉 Model and tokenizer loaded successfully!")
         logger.info(f"⏱️  Total loading time: {time.time() - start_time:.2f} seconds")
@@ -258,21 +254,19 @@ def load_model_and_tokenizer():
 def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, str]:
     """
     Predict T/F style classification using the loaded model.
-    
     Args:
         text: Input text
         situation: Situation type (default: "친구_갈등")
-        
     Returns:
         Dictionary with T and F probabilities
     """
     global model, tokenizer
-    
-    logger.info("\n" + "="*50)
+
+    logger.info("\n" + "=" * 50)
     logger.info(f"🔍 Starting prediction - Situation: {situation}")
     logger.info(f"📝 Input text: {text[:100]}{'...' if len(text) > 100 else ''}")
     start_time = time.time()
-    
+
     try:
         # Check if model and tokenizer are loaded
         if model is None or tokenizer is None:
@@ -314,7 +308,7 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         # Move inputs to the same device as model
         device = next(model.parameters()).device
         logger.info(f"⚙️  Using device: {device}")
-        
+
         move_start = time.time()
         inputs = {k: v.to(device) for k, v in inputs.items()}
         situation_id = situation_id.to(device)
@@ -354,7 +348,6 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
 def load_models_if_needed():
     """
     Load models if they are not already loaded.
-
     This function ensures that both the model and tokenizer are loaded
     before they are used for prediction.
     """
@@ -372,7 +365,6 @@ def load_models_if_needed():
 def get_model():
     """
     Get the model instance.
-
     Returns:
         The loaded model instance
     """
@@ -391,7 +383,6 @@ def get_model():
 def get_tokenizer():
     """
     Get the tokenizer instance.
-
     Returns:
         The loaded tokenizer instance
     """
@@ -411,7 +402,6 @@ def get_tokenizer():
 def get_model_and_tokenizer():
     """
     Get both model and tokenizer instances.
-
     Returns:
         Tuple of (model, tokenizer)
     """
