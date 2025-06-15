@@ -3,6 +3,5 @@ __pycache__/
 *.pt
 *.bin
 model_cache/
-data/
 *.ipynb
 venv/
