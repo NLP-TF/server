@@ -67,6 +67,12 @@ class RankingService:
             # On Unix systems, rename is atomic
             temp_file.replace(self.rankings_file)
             
+            # --- DEBUG: Write to file for test diagnosis ---
+            with open("rankings_backend_debug.txt", "w") as dbg:
+                dbg.write(f"rankings_file: {self.rankings_file}\n")
+                dbg.write(f"rankings_file.exists: {self.rankings_file.exists()}\n")
+                dbg.write(f"rankings_file.parent: {self.rankings_file.parent}\n")
+                dbg.write(f"rankings_file.parent.exists: {self.rankings_file.parent.exists()}\n")
             print(f"Successfully wrote to {self.rankings_file.absolute()}")
             print(f"File exists after save: {self.rankings_file.exists()}")
             print("=== End of _save_rankings ===\n")

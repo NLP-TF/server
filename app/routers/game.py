@@ -46,19 +46,18 @@ async def start_game(request: GameStartRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/round/{round_number}", response_model=RoundResponse)
-async def get_round(round_number: int):
+@router.get("/round/{session_id}/{round_number}", response_model=RoundResponse)
+async def get_round(session_id: str, round_number: int):
     """
-    Get the situation and example response for a specific round.
-    
+    Get the situation and example response for a specific round for a session.
+    - **session_id**: The game session ID
     - **round_number**: The round number (1-5)
-    
     Returns the round details including the situation and example response.
     """
     try:
-        round_info = game_service.get_round(round_number)
+        round_info = game_service.get_round(session_id, round_number)
         if not round_info:
-            raise HTTPException(status_code=404, detail=f"Round {round_number} not found")
+            raise HTTPException(status_code=404, detail=f"Round {round_number} not found for session {session_id}")
         return round_info
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
