@@ -16,7 +16,6 @@ pydantic==2.5.2
 # Machine Learning & NLP
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.2.0+cpu
---only-binary :all: sentencepiece>=0.1.99
 transformers==4.36.2
 huggingface-hub>=0.25.0
 peft==0.15.2
