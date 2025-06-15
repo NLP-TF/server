@@ -258,22 +258,27 @@ def load_model_and_tokenizer():
 def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, str]:
     """
     Predict T/F style classification using the loaded model.
-
+    
     Args:
         text: Input text
         situation: Situation type (default: "친구_갈등")
-
+        
     Returns:
         Dictionary with T and F probabilities
     """
-    logger.info("\n" + "=" * 50)
+    global model, tokenizer
+    
+    logger.info("\n" + "="*50)
     logger.info(f"🔍 Starting prediction - Situation: {situation}")
     logger.info(f"📝 Input text: {text[:100]}{'...' if len(text) > 100 else ''}")
     start_time = time.time()
-
+    
     try:
-        # Get model and tokenizer using cached function
-        model, tokenizer = get_model_and_tokenizer()
+        # Check if model and tokenizer are loaded
+        if model is None or tokenizer is None:
+            error_msg = "❌ Model or tokenizer not loaded"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         # Map situation to ID (0-6)
         situation_map = {
@@ -309,7 +314,7 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         # Move inputs to the same device as model
         device = next(model.parameters()).device
         logger.info(f"⚙️  Using device: {device}")
-
+        
         move_start = time.time()
         inputs = {k: v.to(device) for k, v in inputs.items()}
         situation_id = situation_id.to(device)
