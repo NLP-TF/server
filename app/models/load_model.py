@@ -257,33 +257,23 @@ def load_model_and_tokenizer():
 
 def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, str]:
     """
-    Predict T/F style based on input text and situation.
+    Predict T/F style classification using the loaded model.
 
     Args:
-        text: Input text to analyze
-        situation: The situation context (default: "친구_갈등")
+        text: Input text
+        situation: Situation type (default: "친구_갈등")
 
     Returns:
         Dictionary with T and F probabilities
     """
-    global model, tokenizer
-
     logger.info("\n" + "=" * 50)
     logger.info(f"🔍 Starting prediction - Situation: {situation}")
     logger.info(f"📝 Input text: {text[:100]}{'...' if len(text) > 100 else ''}")
     start_time = time.time()
 
     try:
-        # Load models if not already loaded
-        logger.info("🔍 Checking if models need to be loaded...")
-        load_models_if_needed()
-
-        if model is None or tokenizer is None:
-            error_msg = "❌ Model or tokenizer not loaded"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        logger.info("✅ Models loaded successfully")
+        # Get model and tokenizer using cached function
+        model, tokenizer = get_model_and_tokenizer()
 
         # Map situation to ID (0-6)
         situation_map = {
@@ -302,7 +292,6 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         logger.info(f"🎯 Using situation ID: {situation_id.item()} ({situation})")
 
         # Tokenize input
-        logger.info("🔡 Tokenizing input text...")
         tokenization_start = time.time()
         inputs = tokenizer(
             text,
@@ -317,17 +306,16 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         logger.debug(f"Input IDs shape: {inputs['input_ids'].shape}")
         logger.debug(f"Attention mask shape: {inputs['attention_mask'].shape}")
 
-        # Move tensors to the same device as model
+        # Move inputs to the same device as model
         device = next(model.parameters()).device
         logger.info(f"⚙️  Using device: {device}")
 
         move_start = time.time()
         inputs = {k: v.to(device) for k, v in inputs.items()}
         situation_id = situation_id.to(device)
-        logger.info(f"🔄 Moved tensors to {device} in {time.time() - move_start:.2f}s")
+        logger.info(f"✅ Inputs moved to device in {time.time() - move_start:.2f}s")
 
-        # Make prediction
-        logger.info("🧠 Running model inference...")
+        # Inference
         inference_start = time.time()
         with torch.no_grad():
             logits = model(
@@ -336,11 +324,10 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
                 situation_id=situation_id,
             )
             probs = torch.softmax(logits, dim=1).squeeze()
+            inference_time = time.time() - inference_start
+            logger.info(f"✅ Inference completed in {inference_time:.2f}s")
 
-        inference_time = time.time() - inference_start
-        logger.info(f"✅ Inference completed in {inference_time:.2f}s")
-
-        # Convert to percentages
+        # Calculate probabilities
         t_prob = float(probs[0]) * 100
         f_prob = float(probs[1]) * 100
 
@@ -419,16 +406,17 @@ def get_tokenizer():
 def get_model_and_tokenizer():
     """
     Get both model and tokenizer instances.
-    
+
     Returns:
         Tuple of (model, tokenizer)
     """
     global model, tokenizer
-    
+    load_models_if_needed()
+
     if model is None or tokenizer is None:
         error_msg = f"❌ Model or tokenizer not available (model: {model is not None}, tokenizer: {tokenizer is not None})"
         logger.error(error_msg)
         raise ValueError(error_msg)
-        
+
     logger.debug("✅ Both model and tokenizer instances retrieved successfully")
     return model, tokenizer
