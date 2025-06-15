@@ -16,34 +16,47 @@ tokenizer = None
 
 
 class KoBERT_TF_Model(nn.Module):
-    def __init__(self, num_situations=7, num_labels=2):
+    def __init__(
+        self, hidden_size=768, num_classes=2, situation_dim=64, num_situations=7
+    ):
         super().__init__()
         # Load base BERT model
         self.bert = BertModel.from_pretrained("monologg/kobert")
 
-        # Situation embedding
-        self.situation_embedding = nn.Embedding(num_situations, 768)
+        # Situation embedding with smaller dimension
+        self.situ_embed = nn.Embedding(num_situations, situation_dim)
 
-        # Classifier
-        self.classifier = nn.Linear(768, num_labels)
+        # Classifier with late fusion architecture
+        self.classifier = nn.Sequential(
+            nn.Linear(
+                hidden_size + situation_dim, 256
+            ),  # Concatenate BERT CLS and situation embedding
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(256, num_classes),
+        )
 
     def forward(self, input_ids, attention_mask, situation_id=None):
         # Get BERT outputs
-        outputs = self.bert(
+        bert_out = self.bert(
             input_ids=input_ids, attention_mask=attention_mask, return_dict=True
         )
 
         # Get [CLS] token representation
-        cls_output = outputs.last_hidden_state[:, 0, :]
+        cls_vec = bert_out.last_hidden_state[:, 0, :]
 
-        # Add situation embedding if provided
+        # Get situation embedding and concatenate with CLS vector
         if situation_id is not None:
-            situation_emb = self.situation_embedding(situation_id)
-            cls_output = cls_output + situation_emb.squeeze(1)
-
-        # Get logits
-        logits = self.classifier(cls_output)
-        return logits
+            situ_vec = self.situ_embed(situation_id)
+            combined = torch.cat([cls_vec, situ_vec.squeeze(1)], dim=1)
+            return self.classifier(combined)
+        else:
+            # If no situation_id is provided, just use zeros for compatibility
+            batch_size = cls_vec.size(0)
+            device = cls_vec.device
+            situ_vec = torch.zeros(batch_size, 64, device=device)  # 64 is situation_dim
+            combined = torch.cat([cls_vec, situ_vec], dim=1)
+            return self.classifier(combined)
 
 
 def load_model_and_tokenizer():
@@ -54,74 +67,68 @@ def load_model_and_tokenizer():
         return
 
     try:
+        # Clear CUDA cache to free up memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         logger.info("1. Loading tokenizer...")
-        tokenizer = AutoTokenizer.from_pretrained("monologg/kobert", trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "monologg/kobert", trust_remote_code=True
+        )
 
         logger.info("2. Loading model...")
+        # Initialize model with the same architecture as Colab
         model = KoBERT_TF_Model()
 
         # Load model weights
-        logger.info("3. Loading model weights...")
-        model_path = "pytorch_model.bin"
-        if not os.path.exists(model_path):
-            logger.info("Downloading model weights...")
-            try:
-                from huggingface_hub import hf_hub_download
+        logger.info("3. Downloading model weights...")
+        from huggingface_hub import hf_hub_download
 
-                model_path = hf_hub_download(
-                    repo_id="yniiiiii/kobert-tf-model-1",
-                    filename="pytorch_model.bin",
-                    cache_dir="model_cache",
-                )
-                logger.info(f"✅ Model weights downloaded to: {model_path}")
-                logger.debug(
-                    f"Model file size: {os.path.getsize(model_path) / (1024*1024):.2f} MB"
-                )
-            except Exception as e:
-                logger.error(f"❌ Failed to download model weights: {str(e)}")
-                raise
+        model_path = hf_hub_download(
+            repo_id="yniiiiii/kobert-tf-model-1", filename="pytorch_model.bin"
+        )
+        logger.info(f"✅ Model weights downloaded to: {model_path}")
 
-        # Load the state dict
+        # Load state dict
         logger.info("4. Loading model weights...")
-        try:
-            state_dict = torch.load(model_path, map_location=torch.device("cpu"))
+        state_dict = torch.load(model_path, map_location=torch.device("cpu"))
 
-            # Handle state dict with unexpected keys
-            if any(k.startswith("module.") for k in state_dict.keys()):
-                logger.info("Removing 'module.' prefix from state dict keys")
-                state_dict = {
-                    k.replace("module.", ""): v for k, v in state_dict.items()
-                }
+        # Load state dict with strict=False to handle any missing keys
+        model.load_state_dict(state_dict, strict=False)
 
-            # Load state dict with strict=False to handle potential mismatches
-            missing_keys, unexpected_keys = model.load_state_dict(
-                state_dict, strict=False
-            )
-
-            if missing_keys:
-                logger.warning(f"Missing keys in state dict: {missing_keys}")
-            if unexpected_keys:
-                logger.warning(f"Unexpected keys in state dict: {unexpected_keys}")
-
-            logger.info("✅ Model weights loaded successfully.")
-
-        except Exception as e:
-            logger.error(f"❌ Failed to load model weights: {str(e)}")
-            raise
-
-        # Set to eval mode
+        # Set model to evaluation mode
         model.eval()
         logger.info("✅ Model set to evaluation mode.")
 
-        # Run a test prediction
-        logger.info("\n4. Running test prediction...")
-        try:
-            test_text = "테스트 문장입니다."
-            logger.info(f"Test input: '{test_text}'")
-            result = predict_tf_style(test_text)
-            logger.info(f"Test prediction: {result}")
-        except Exception as e:
-            logger.warning(f"⚠️ Test prediction failed: {str(e)}")
+        # Test prediction
+        logger.info("\n5. Running test prediction...")
+        test_text = "테스트 문장입니다."
+        logger.info(f"Test input: '{test_text}'")
+
+        # Prepare inputs
+        inputs = tokenizer(
+            test_text,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=256,
+        )
+
+        # Make prediction
+        with torch.no_grad():
+            logits = model(
+                inputs["input_ids"],
+                inputs["attention_mask"],
+                situation_id=torch.tensor([6]),  # 친구_갈등
+            )
+            probs = torch.softmax(logits, dim=1).squeeze()
+
+            t_prob = float(probs[0]) * 100
+            f_prob = float(probs[1]) * 100
+
+            logger.info(
+                f"Test prediction: {{'T 확률': '{t_prob:.2f}%', 'F 확률': '{f_prob:.2f}%'}}"
+            )
 
         logger.info("\n✅ Model and tokenizer loaded successfully!")
 
@@ -192,26 +199,26 @@ def predict_tf_style(text: str, situation: str = "친구_갈등") -> Dict[str, s
         return {"error": str(e), "T 확률": "0.00%", "F 확률": "0.00%"}
 
 
-# Load the model and tokenizer when this module is imported
-if __name__ != "__main__":
-    load_model_and_tokenizer()
+def load_models_if_needed():
+    """Load models if they are not already loaded."""
+    global model, tokenizer
+    if model is None or tokenizer is None:
+        load_model_and_tokenizer()
 
 
 def get_model():
     """Get the model instance."""
-    if model is None:
-        load_model_and_tokenizer()
+    load_models_if_needed()
     return model
 
 
 def get_tokenizer():
     """Get the tokenizer instance."""
-    if tokenizer is None:
-        load_model_and_tokenizer()
+    load_models_if_needed()
     return tokenizer
 
 
 def get_model_and_tokenizer():
     """Get both model and tokenizer instances."""
-    load_model_and_tokenizer()
+    load_models_if_needed()
     return model, tokenizer
