@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import logging
 from typing import Dict, Any, Optional, Tuple
-from transformers import BertModel, BertForSequenceClassification, BertTokenizer
+from transformers import BertModel, BertForSequenceClassification, AutoTokenizer
 import torch.nn.functional as F
 
 # Configure logging
@@ -55,7 +55,7 @@ def load_model_and_tokenizer():
 
     try:
         logger.info("1. Loading tokenizer...")
-        tokenizer = BertTokenizer.from_pretrained("monologg/kobert")
+        tokenizer = AutoTokenizer.from_pretrained("monologg/kobert", trust_remote_code=True)
 
         logger.info("2. Loading model...")
         model = KoBERT_TF_Model()
