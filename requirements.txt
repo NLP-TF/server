@@ -18,12 +18,15 @@ pydantic==2.5.2
 numpy<2.0.0  # NumPy 2.x 호환성 문제로 1.x 버전 고정
 torch==2.2.0
 transformers==4.36.2
-huggingface-hub>=0.25.0
-sentencepiece>=0.1.99  # transformers 의존성
+huggingface-hub==0.25.0
+sentencepiece==0.1.99  # transformers 의존성
 
 # Testing
 pytest==7.4.4
 pytest-cov==4.1.0
+
+# System Monitoring
+psutil>=5.9.0  # 시스템 리소스 모니터링을 위한 라이브러리
 
 # Async Support
 greenlet>=3.2.3
