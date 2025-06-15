@@ -14,10 +14,11 @@ asyncpg>=0.27.0
 pydantic==2.5.2
 
 # Machine Learning & NLP
-torch==2.2.0
+-extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.0+cpu
 transformers==4.36.2
 sentencepiece==0.1.99
-huggingface-hub==0.15.0
+huggingface-hub==0.19.3
 peft==0.15.2
 
 # Testing
