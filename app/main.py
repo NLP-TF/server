@@ -141,15 +141,3 @@ async def read_item(item_id: int):
     if item_id < 0 or item_id >= len(items_db):
         raise HTTPException(status_code=404, detail="Item not found")
     return items_db[item_id]
-
-
-if __name__ == "__main__":
-    import uvicorn
-    import os
-
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8080)),
-        reload=False,
-    )
