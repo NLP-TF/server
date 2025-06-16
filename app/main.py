@@ -47,13 +47,21 @@ async def create_tables():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Create database tables
-    await create_tables()
-    print("✅ Database tables created")
-    # Initialize stats
-    initialize_stats()
+    try:
+        await create_tables()
+        print("✅ Database tables created")
+    except Exception as e:
+        print(f"❌ Database table creation failed: {e}")
+    try:
+        initialize_stats()
+        print("✅ Stats initialized")
+    except Exception as e:
+        print(f"❌ Stats initialization failed: {e}")
     yield
-    await engine.dispose()
+    try:
+        await engine.dispose()
+    except Exception as e:
+        print(f"❌ Engine dispose failed: {e}")
 
 
 # Initialize FastAPI app with lifespan
