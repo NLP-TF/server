@@ -6,156 +6,128 @@
 
 ## 📚 API Documentation
 
-### Base URL
+### 기본 정보
+- **Base URL**: `http://localhost:8000`
+- **API 버전**: v1
+- **인코딩**: UTF-8
 
-```
-http://localhost:8000
-```
+### 엔드포인트 목록
 
-### Authentication
+#### 1. 게임 시작
+새로운 게임 세션을 시작합니다.
 
-Most endpoints require authentication. Include the access token in the request headers:
+- **URL**: `POST /api/v1/game/start`
+- **요청 본문**:
+  ```json
+  {
+    "nickname": "사용자닉네임",
+    "user_type": "T"  // "T" 또는 "F" 중 하나
+  }
+  ```
+- **성공 응답 (200)**:
+  ```json
+  {
+    "session_id": "생성된_세션_ID",
+    "message": "Game started successfully"
+  }
+  ```
+- **에러 응답**:
+  - 400: 잘못된 요청 (예: 잘못된 user_type)
+  - 500: 서버 내부 오류
 
-```
-Authorization: Bearer <your_access_token>
-```
+#### 2. 라운드 정보 조회
+특정 라운드의 상황과 예시 응답을 조회합니다.
 
-### Endpoints
+- **URL**: `GET /api/v1/game/round/{session_id}/{round_number}`
+- **경로 파라미터**:
+  - `session_id`: 게임 세션 ID
+  - `round_number`: 라운드 번호 (1-5)
+- **성공 응답 (200)**:
+  ```json
+  {
+    "round_number": 1,
+    "situation": "연인_갈등",
+    "scenario": "당신의 연인이 당신의 계획을 무시하고 다른 약속을 잡았을 때 어떻게 반응하시겠습니까?",
+    "example_response": "괜찮아, 다음에 같이 하자."
+  }
+  ```
+- **에러 응답**:
+  - 400: 잘못된 요청
+  - 404: 해당 라운드 또는 세션을 찾을 수 없음
 
-#### 1. Authentication
+#### 3. 응답 제출 및 점수 확인
+사용자의 응답을 제출하고 점수를 확인합니다.
 
-**POST /api/auth/token**
+- **URL**: `POST /api/v1/game/submit`
+- **요청 본문**:
+  ```json
+  {
+    "session_id": "세션_ID",
+    "user_response": "사용자 응답 텍스트",
+    "round_number": 1,
+    "situation": "연인_갈등"
+  }
+  ```
+- **성공 응답 (200)**:
+  ```json
+  {
+    "round_number": 1,
+    "score": 85,
+    "feedback": "좋은 반응이에요!",
+    "is_completed": true
+  }
+  ```
+- **에러 응답**:
+  - 400: 잘못된 요청
+  - 404: 세션을 찾을 수 없거나 이미 완료된 라운드
 
-Get access token for authentication.
+#### 4. 게임 결과 요약
+게임 결과와 리더보드 순위를 확인합니다.
 
-```http
-POST /api/auth/token
-Content-Type: application/x-www-form-urlencoded
+- **URL**: `GET /api/v1/game/summary/{session_id}`
+- **경로 파라미터**:
+  - `session_id`: 게임 세션 ID
+- **성공 응답 (200)**:
+  ```json
+  {
+    "session_id": "세션_ID",
+    "nickname": "사용자닉네임",
+    "total_score": 420,
+    "round_scores": [85, 90, 80, 85, 80],
+    "rank": 3,
+    "total_players": 150
+  }
+  ```
+- **에러 응답**:
+  - 400: 잘못된 요청
+  - 404: 세션을 찾을 수 없거나 게임이 아직 완료되지 않음
 
-username=testuser&password=testpass
-```
+### CORS 설정
+다음 도메인에서의 요청이 허용됩니다:
+- http://localhost
+- http://localhost:3000
+- http://127.0.0.1
+- http://127.0.0.1:3000
+- https://your-production-domain.com
 
-**Response:**
+### 에러 처리
+모든 API는 표준 HTTP 상태 코드를 사용합니다:
+- 200: 성공
+- 400: 잘못된 요청
+- 404: 리소스를 찾을 수 없음
+- 500: 서버 내부 오류
 
+에러 응답 예시:
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
+  "detail": "에러 메시지"
 }
 ```
 
-#### 2. Game Sessions
-
-**POST /api/game/start**
-
-Start a new game session.
-
-```http
-POST /api/game/start
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "player_name": "Player1",
-  "difficulty": "medium"
-}
-```
-
-**Response:**
-
-```json
-{
-  "session_id": "abc123",
-  "scenario": "You find a wallet on the street. What do you do?",
-  "options": ["Keep it", "Try to find the owner"],
-  "current_round": 1,
-  "total_rounds": 5
-}
-```
-
-**POST /api/game/answer**
-
-Submit an answer for the current round.
-
-```http
-POST /api/game/answer
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "session_id": "abc123",
-  "answer": "Keep it"
-}
-```
-
-**Response:**
-
-```json
-{
-  "result": "T",
-  "explanation": "Your choice suggests a preference for Thinking over Feeling.",
-  "next_scenario": "Your colleague takes credit for your work...",
-  "options": ["Confront them", "Let it go this time"],
-  "current_round": 2,
-  "completed": false
-}
-```
-
-#### 3. Leaderboard
-
-**GET /api/leaderboard**
-
-Get the current leaderboard.
-
-```http
-GET /api/leaderboard
-Authorization: Bearer <token>
-```
-
-**Response:**
-
-```json
-{
-  "leaderboard": [
-    {
-      "rank": 1,
-      "player_name": "MBTI_Master",
-      "score": 950,
-      "mbti_type": "INTJ"
-    },
-    {
-      "rank": 2,
-      "player_name": "Thinker123",
-      "score": 890,
-      "mbti_type": "INTP"
-    }
-  ]
-}
-```
-
-#### 4. User Profile
-
-**GET /api/users/me**
-
-Get current user's profile and stats.
-
-```http
-GET /api/users/me
-Authorization: Bearer <token>
-```
-
-**Response:**
-
-```json
-{
-  "username": "testuser",
-  "email": "test@example.com",
-  "games_played": 5,
-  "highest_score": 850,
-  "average_score": 720,
-  "frequent_mbti": "INTJ"
-}
-```
+### 참고 사항
+- 모든 요청은 JSON 형식이어야 합니다.
+- 인증이 필요한 경우, 추후 API 키 또는 JWT 토큰이 필요할 수 있습니다.
+- 실제 배포 시에는 HTTPS를 사용하는 것이 좋습니다.
 
 ### Error Responses
 
