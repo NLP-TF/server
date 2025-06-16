@@ -80,6 +80,8 @@ origins = [
     "http://127.0.0.1",
     "http://127.0.0.1:3000",
     "https://your-production-domain.com",
+    "http://localhost:5173",
+    "https://nlp-tf-front-end.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
