@@ -25,9 +25,9 @@
   },
   "hello": {
     "nickname": "hello",
-    "total_score": 715.9842669963837,
-    "game_count": 2,
-    "user_type": "F"
+    "total_score": 1156.5922856330872,
+    "game_count": 3,
+    "user_type": "T"
   },
   "string": {
     "nickname": "string",
@@ -44,6 +44,12 @@
   "hh": {
     "nickname": "hh",
     "total_score": 429.208767414093,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "hihi": {
+    "nickname": "hihi",
+    "total_score": 380.3524225950241,
     "game_count": 1,
     "user_type": "T"
   }

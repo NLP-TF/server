@@ -19,7 +19,8 @@ class RankingService:
         self.data_dir = Path(os.environ.get("RANKING_DATA_DIR", "data"))
         self.data_dir.mkdir(exist_ok=True, parents=True)
         self.rankings_file = self.data_dir / "rankings.json"
-        self.rankings: Dict[str, PlayerScore] = {}
+        # Change to store by session_id instead of nickname
+        self.rankings: Dict[str, PlayerScore] = {}  # key: session_id
         self._load_rankings()
     
     def _load_rankings(self):
@@ -91,11 +92,17 @@ class RankingService:
             nickname: Player's nickname
             score: Score to add to player's total
             user_type: The MBTI user type (e.g., 'T' for Thinking, 'F' for Feeling)
-            session_id: Optional session ID for tracking
+            session_id: Session ID for tracking individual players (required)
             
         Returns:
             bool: True if update was successful, False otherwise
+            
+        Raises:
+            ValueError: If session_id is not provided
         """
+        if not session_id:
+            raise ValueError("session_id is required for tracking player scores")
+            
         try:
             print("\n=== update_ranking ===")
             print(f"Nickname: {nickname}")
@@ -110,22 +117,22 @@ class RankingService:
             # Print current rankings before update
             print(f"Current rankings before update: {[p.dict() for p in self.rankings.values()]}")
             
-            # Update player's score
-            if nickname in self.rankings:
-                player = self.rankings[nickname]
-                player.total_score += score
+            # Update player's score using session_id as the key
+            if session_id in self.rankings:
+                player = self.rankings[session_id]
+                player.total_score = score  # Update to new score instead of adding
                 player.game_count += 1
                 if user_type:
                     player.user_type = user_type
-                print(f"Updated existing player {nickname}: total_score={player.total_score}, game_count={player.game_count}")
+                print(f"Updated existing player {player.nickname} (session {session_id}): total_score={player.total_score}, game_count={player.game_count}")
             else:
-                self.rankings[nickname] = PlayerScore(
-                    nickname=nickname,
+                self.rankings[session_id] = PlayerScore(
+                    nickname=nickname or f"Player_{session_id[:8]}",
                     total_score=score,
                     game_count=1,
                     user_type=user_type or 'U'  # Default to 'U' for Unknown if not provided
                 )
-                print(f"Added new player {nickname}: total_score={score}, game_count=1, user_type={user_type or 'U'}")
+                print(f"Added new player {nickname} (session {session_id}): total_score={score}, game_count=1, user_type={user_type or 'U'}")
             
             # Save the updated rankings asynchronously
             print("Saving rankings...")
@@ -180,7 +187,8 @@ class RankingService:
                 "nickname": player.nickname,
                 "score": player.total_score,
                 "average": player.average_score,
-                "rank": i
+                "rank": i,
+                "user_type": player.user_type  # Include user_type in the response
             })
         
         return {
