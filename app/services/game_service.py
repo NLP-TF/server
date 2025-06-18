@@ -610,6 +610,7 @@ class GameService:
                             float(p["total_score"])
                         ),  # Convert to float then string
                         "rank": str(i + 1),  # Convert rank to string
+                        "user_type": str(p["user_type"]),  # Add user type (T/F)
                     }
                     for i, p in enumerate(leaderboard)
                     if p["id"] != session_id
