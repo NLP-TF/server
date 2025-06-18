@@ -163,6 +163,9 @@ class RankingService:
         Returns:
             dict: Contains 'rankings' (list of player dicts) and 'total_players' (int)
         """
+        # Reload rankings from disk to ensure we have the latest data
+        self._load_rankings()
+        
         # Convert to list and sort by total_score in descending order
         players = list(self.rankings.values())
         players.sort(key=lambda x: x.total_score, reverse=True)
