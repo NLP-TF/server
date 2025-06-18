@@ -114,30 +114,38 @@ class RankingService:
             print(f"Data directory: {self.data_dir.absolute()}")
             print(f"Rankings file: {self.rankings_file.absolute()}")
             
-            # Print current rankings before update
-            print(f"Current rankings before update: {[p.dict() for p in self.rankings.values()]}")
+            # Normalize user_type
+            user_type = (user_type or 'U').upper()
             
-            # Update player's score using session_id as the key
-            if session_id in self.rankings:
-                player = self.rankings[session_id]
-                player.total_score = score  # Update to new score instead of adding
+            # Create a unique key that combines nickname and user_type to prevent duplicates
+            player_key = f"{nickname}_{user_type}"
+            
+            # Check if player with same nickname and user_type already exists
+            existing_session_id = None
+            for sid, player in self.rankings.items():
+                if player.nickname == nickname and player.user_type == user_type:
+                    existing_session_id = sid
+                    break
+            
+            if existing_session_id:
+                # Update existing player's score
+                player = self.rankings[existing_session_id]
+                player.total_score = score  # Update to new score
                 player.game_count += 1
-                if user_type:
-                    player.user_type = user_type
-                print(f"Updated existing player {player.nickname} (session {session_id}): total_score={player.total_score}, game_count={player.game_count}")
+                print(f"Updated existing player {player.nickname} (type: {player.user_type}): total_score={player.total_score}, game_count={player.game_count}")
             else:
+                # Add new player
                 self.rankings[session_id] = PlayerScore(
-                    nickname=nickname or f"Player_{session_id[:8]}",
+                    nickname=nickname,
                     total_score=score,
                     game_count=1,
-                    user_type=user_type or 'U'  # Default to 'U' for Unknown if not provided
+                    user_type=user_type
                 )
-                print(f"Added new player {nickname} (session {session_id}): total_score={score}, game_count=1, user_type={user_type or 'U'}")
+                print(f"Added new player {nickname} (type: {user_type}): total_score={score}")
             
-            # Save the updated rankings asynchronously
+            # Save the updated rankings
             print("Saving rankings...")
             save_success = await self._save_rankings()
-            print(f"Save successful: {save_success}")
             
             # Verify the rankings were saved correctly
             if save_success and self.rankings_file.exists():
@@ -161,11 +169,12 @@ class RankingService:
             traceback.print_exc()
             return False
     
-    def get_rankings(self, limit: int = 10) -> dict:
-        """Get top N rankings.
+    def get_rankings(self, limit: int = 10, user_type: str = None) -> dict:
+        """Get top N rankings, optionally filtered by user_type.
         
         Args:
             limit: Maximum number of rankings to return
+            user_type: Optional filter to get rankings for specific user type ('T' or 'F')
             
         Returns:
             dict: Contains 'rankings' (list of player dicts) and 'total_players' (int)
@@ -173,11 +182,15 @@ class RankingService:
         # Reload rankings from disk to ensure we have the latest data
         self._load_rankings()
         
-        # Convert to list and sort by total_score in descending order
+        # Filter players by user_type if specified
         players = list(self.rankings.values())
+        if user_type and user_type.upper() in ['T', 'F']:
+            players = [p for p in players if p.user_type == user_type.upper()]
+        
+        # Sort by total_score in descending order
         players.sort(key=lambda x: x.total_score, reverse=True)
         
-        # Apply limit and format results
+        # Apply limit
         limited_players = players[:limit] if limit is not None else players
         
         # Create rankings with proper rank (1-based index)
@@ -188,12 +201,13 @@ class RankingService:
                 "score": player.total_score,
                 "average": player.average_score,
                 "rank": i,
-                "user_type": player.user_type  # Include user_type in the response
+                "user_type": player.user_type,
+                "game_count": player.game_count
             })
         
         return {
             "rankings": rankings,
-            "total_players": len(self.rankings)
+            "total_players": len(players)  # Return count of filtered players
         }
 
 # Singleton instance

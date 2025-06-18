@@ -13,9 +13,9 @@
   },
   "daisy": {
     "nickname": "daisy",
-    "total_score": 421.4,
-    "game_count": 1,
-    "user_type": "T"
+    "total_score": 481.85953184366224,
+    "game_count": 2,
+    "user_type": "F"
   },
   "ai": {
     "nickname": "ai",
@@ -25,9 +25,9 @@
   },
   "hello": {
     "nickname": "hello",
-    "total_score": 1156.5922856330872,
-    "game_count": 3,
-    "user_type": "T"
+    "total_score": 1281.5762303769588,
+    "game_count": 5,
+    "user_type": "F"
   },
   "string": {
     "nickname": "string",
@@ -50,6 +50,48 @@
   "hihi": {
     "nickname": "hihi",
     "total_score": 380.3524225950241,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "kyle": {
+    "nickname": "kyle",
+    "total_score": 60.56426167488098,
+    "game_count": 1,
+    "user_type": "F"
+  },
+  "7a5396ae-dde5-4d92-8b13-b7e4d203f016": {
+    "nickname": "string",
+    "total_score": 117.85918027162552,
+    "game_count": 1,
+    "user_type": "F"
+  },
+  "87052ff7-6aab-4d00-b379-391c5452c85e": {
+    "nickname": "how are you",
+    "total_score": 149.08016622066498,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "74684a93-4adf-499e-a736-cad977976010": {
+    "nickname": "선명",
+    "total_score": 343.71514320373535,
+    "game_count": 1,
+    "user_type": "T"
+  },
+  "4d7a3801-8ac0-4f9f-969c-ed9f644b4028": {
+    "nickname": "선명",
+    "total_score": 347.4769413471222,
+    "game_count": 2,
+    "user_type": "F"
+  },
+  "2f85ad0c-98c0-4fe8-8ff6-ad6cfddf01f5": {
+    "nickname": "선명",
+    "total_score": 155.23638427257538,
+    "game_count": 1,
+    "user_type": "F"
+  },
+  "6fa69b80-6957-426d-9ef4-c066f9f9e657": {
+    "nickname": "선명",
+    "total_score": 350.6333351135254,
     "game_count": 1,
     "user_type": "T"
   }

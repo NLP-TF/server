@@ -297,11 +297,23 @@ class GameService:
 
         db = next(get_db())
         try:
+            # Ensure user_type is a string 'T' or 'F'
+            user_type_str = (
+                user_type.value
+                if hasattr(user_type, "value")
+                else str(user_type).upper()
+            )
+            user_type_str = (
+                "T" if user_type_str.upper() == "T" else "F"
+            )  # Force to 'T' or 'F'
+
+            logger.debug(f"Creating session with user_type: {user_type_str}")
+
             # Create new game session in database
             db_session = DBGameSession(
                 id=str(uuid.uuid4()),
                 nickname=nickname,
-                user_type=user_type.value,
+                user_type=user_type_str,
                 total_score=0.0,
             )
 
@@ -530,16 +542,23 @@ class GameService:
         Raises:
             ValueError: If session_id is invalid
         """
+        logger.info(f"Getting summary for session: {session_id}")
         db = next(get_db())
         try:
             # Start a transaction
             async with db.begin():
                 # Get game session from database using SQLAlchemy 2.0 async syntax
                 stmt = select(DBGameSession).where(DBGameSession.id == session_id)
+                logger.debug(f"Executing query: {stmt}")
                 result = await db.execute(stmt)
                 db_session = result.scalar_one_or_none()
                 if not db_session:
                     raise ValueError("Game session not found")
+
+                # Log the user_type from database
+                logger.info(
+                    f"Database user_type: {db_session.user_type} (type: {type(db_session.user_type)})"
+                )
 
                 # Get all scores for this session
                 stmt = (
@@ -602,7 +621,7 @@ class GameService:
                 rank = await self._calculate_rank(total_score, leaderboard)
                 percentile = await self._calculate_percentile(total_score)
 
-                # Get top players (excluding current player)
+                # Get all players with scores (excluding current player)
                 top_players = [
                     {
                         "nickname": str(p["nickname"]),
@@ -614,9 +633,7 @@ class GameService:
                     }
                     for i, p in enumerate(leaderboard)
                     if p["id"] != session_id
-                ][
-                    :3
-                ]  # Take top 3
+                ]  # Include all players with scores
 
                 # Prepare round scores with situation and situation_detail
                 round_scores = []
@@ -633,14 +650,44 @@ class GameService:
                     }
                     round_scores.append(round_score)
 
-                # Generate feedback
-                feedback = self._generate_feedback(
-                    {
-                        "user_type": db_session.user_type,
-                        "scores": [s.score for s in scores],
-                    },
-                    total_score,
+                # Log the user_type for debugging
+                logger.info(
+                    f"[get_summary] Raw user_type from DB: {db_session.user_type} (type: {type(db_session.user_type)})"
                 )
+
+                # Get user_type from the session and ensure it's properly formatted
+                user_type = (
+                    str(db_session.user_type).strip().upper()
+                    if db_session.user_type
+                    else "T"
+                )
+                user_type = user_type[
+                    0
+                ]  # Take first character in case it's a string like 'THINKING'
+                user_type = (
+                    "T" if user_type == "T" else "F"
+                )  # Ensure it's either T or F
+
+                logger.info(f"[get_summary] Processed user_type: {user_type}")
+
+                # Generate feedback based on user type and scores
+                feedback = self._generate_feedback(
+                    session={
+                        "user_type": user_type,
+                        "scores": [
+                            {
+                                "score": score.score,
+                                "is_correct_style": score.is_correct_style,
+                            }
+                            for score in scores
+                        ],
+                    },
+                    total_score=total_score,
+                )
+
+                logger.info(
+                    f"[get_summary] Generated feedback: {feedback[:50]}..."
+                )  # Log first 50 chars of feedback
 
                 # Create summary dictionary
                 summary = {
@@ -885,24 +932,25 @@ class GameService:
             This method is called within a database transaction, so it should not
             perform any database operations that would conflict with the transaction.
         """
+        session_id = session.get("id")
+        if not session_id:
+            logger.warning("Cannot update ranking: missing session ID")
+            return
+
+        # Get user_type from session and ensure it's a string
+        user_type = str(session.get("user_type", "T")).upper()
+        user_type = "T" if user_type == "T" else "F"  # Ensure it's either T or F
+
+        logger.info(
+            f"Updating ranking - Session: {session_id}, Nickname: {session.get('nickname')}, "
+            f"Score: {total_score}, User Type: {user_type}"
+        )
+
         try:
-            logger.debug(
-                "Starting ranking update for session %s", session.get("id", "unknown")
-            )
-
-            # Ensure we have a valid session ID
-            session_id = session.get("id")
-            if not session_id:
-                logger.warning("Cannot update ranking: missing session ID")
-                return
-
-            # Update the ranking service asynchronously
             await ranking_service.update_ranking(
                 nickname=session.get("nickname", "Anonymous"),
                 score=total_score,
-                user_type=session.get(
-                    "user_type", "T"
-                ),  # Default to 'T' if not specified
+                user_type=user_type,
                 session_id=session_id,
             )
 
@@ -920,7 +968,7 @@ class GameService:
                         content = await f.read()
                         logger.debug("Current rankings: %s", content)
             except Exception as e:
-                logger.debug("Could not read rankings file: %s", str(e))
+                logger.warning("Failed to log current rankings: %s", str(e))
 
         except Exception as e:
             logger.error("Error updating ranking service: %s", str(e), exc_info=True)
@@ -1047,57 +1095,100 @@ class GameService:
             str: Personalized feedback message in Korean
         """
         try:
+            logger.info("[_generate_feedback] Starting feedback generation")
+
             # Handle both dict and SQLAlchemy model
             if hasattr(session, "user_type"):
                 # It's a SQLAlchemy model
                 user_type = session.user_type
                 scores = session.scores if hasattr(session, "scores") else []
+                logger.info(
+                    f"[Feedback] SQLAlchemy model - user_type: {user_type}, type: {type(user_type)}"
+                )
             else:
                 # It's a dict
                 user_type = session.get(
                     "user_type", "T"
                 )  # Default to 'T' if not specified
                 scores = session.get("scores", [])
+                logger.info(
+                    f"[Feedback] Dict input - user_type: {user_type}, type: {type(user_type)}"
+                )
+
+            # Debug logging of the entire session for troubleshooting
+            logger.debug(f"[Feedback] Full session data: {session}")
+
+            # Convert to string and ensure it's 'T' or 'F'
+            if hasattr(user_type, "value"):
+                user_type = user_type.value
+                logger.info(
+                    f"[Feedback] After getting enum value: {user_type} (type: {type(user_type)})"
+                )
+
+            # Convert to string and clean up
+            user_type_str = str(user_type).strip().upper()
+            logger.info(
+                f"[Feedback] After string conversion: {user_type_str} (type: {type(user_type_str)})"
+            )
+
+            # Extract first character if it's a string (e.g., 'THINKING' -> 'T')
+            if len(user_type_str) > 1:
+                user_type_str = user_type_str[0]
+                logger.info(f"[Feedback] Extracted first character: {user_type_str}")
+
+            # Force to 'T' or 'F' (case-insensitive)
+            user_type_str = "T" if user_type_str.upper() == "T" else "F"
+
+            logger.info(f"[Feedback] Final user_type: {user_type_str}")
+            is_thinking = user_type_str == "T"
+            logger.info(f"[Feedback] is_thinking: {is_thinking}")
+            logger.info(f"[Feedback] Scores: {scores}")
+            logger.info(f"[Feedback] Total score: {total_score}")
 
             # Calculate average score per round
             num_rounds = len(scores)
             avg_score = total_score / num_rounds if num_rounds > 0 else 0
 
-            # Determine feedback based on average score
-            if avg_score >= 75:
-                if user_type == "T" or user_type == UserType.THINKING:
+            # Log the scores and calculations for debugging
+            logger.info(
+                f"[Feedback] Total score: {total_score}, Num rounds: {num_rounds}, Avg score: {avg_score}"
+            )
+            logger.info(
+                f"[Feedback] User type: {user_type_str}, Is thinking: {is_thinking}"
+            )
+
+            # Determine feedback based on average score and user type
+            if is_thinking:
+                if avg_score >= 75:
+                    return (
+                        "T 유형의 사고 방식을 정말 잘 활용하고 계시네요! "
+                        "논리적이고 분석적인 접근이 돋보입니다."
+                    )
+                elif avg_score >= 50:
+                    return (
+                        "T 유형의 사고 방식을 잘 활용하고 계시네요. "
+                        "조금 더 논리적으로 접근해보는 건 어떨까요?"
+                    )
+                else:  # avg_score < 50
+                    return (
+                        "T 유형의 사고 방식을 이해하는 데 조금 어려움이 있으신 것 같아요. "
+                        "논리적인 사고에 대한 이해를 높이기 위해 노력해보세요!"
+                    )
+            else:  # Feeling type
+                if avg_score >= 75:
                     return (
                         "F 유형의 감정을 정말 잘 이해하고 있어요! "
                         "상대방의 감정에 공감하는 능력이 뛰어나네요."
                     )
-                else:
+                elif avg_score >= 50:
                     return (
-                        "T 유형의 사고 방식을 정말 잘 이해하고 있어요! "
-                        "논리적인 사고에 대한 이해도가 높으시네요."
+                        "F 유형의 감정을 잘 이해하고 있어요. "
+                        "조금 더 감정적인 표현을 연습해보는 건 어떨까요?"
                     )
-
-            elif avg_score >= 50:
-                if user_type == "T" or user_type == UserType.THINKING:
-                    return (
-                        "F 유형의 감정을 잘 이해하고 계세요. "
-                        "약간의 연습만 더 하면 더 나은 결과를 얻을 수 있을 거예요!"
-                    )
-                else:
-                    return (
-                        "T 유형의 사고 방식을 잘 이해하고 계세요. "
-                        "조금 더 연습하면 더 나은 결과를 얻을 수 있을 거예요!"
-                    )
-
-            else:
-                if user_type == "T" or user_type == UserType.THINKING:
+                else:  # avg_score < 50
                     return (
                         "F 유형의 감정을 이해하는 데 조금 어려움이 있으신 것 같아요. "
                         "상대방의 감정에 더 공감하려는 노력이 필요해 보여요."
-                    )
-                else:
-                    return (
-                        "T 유형의 사고 방식을 이해하는 데 조금 어려움이 있으신 것 같아요. "
-                        "논리적인 사고에 대한 이해를 높이기 위해 노력해보세요!"
                     )
 
         except Exception as e:
