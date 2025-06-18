@@ -116,29 +116,30 @@ DEFAULT_SCENARIOS = [
     {
         "situation": "친구_갈등",
         "situation_detail": "중요한 발표에서 실수했을 때",
-        "friend_message": "발표 중에 머리가 하얘져서 아무 말도 못했어… 너무 창피해"
+        "friend_message": "발표 중에 머리가 하얘져서 아무 말도 못했어… 너무 창피해",
     },
     {
         "situation": "연인_갈등",
         "situation_detail": "기념일을 깜빡했을 때",
-        "friend_message": "오늘 무슨 날인지 기억나? 나는 너한테 실망이야."
+        "friend_message": "오늘 무슨 날인지 기억나? 나는 너한테 실망이야.",
     },
     {
         "situation": "가족_갈등",
         "situation_detail": "집안일을 도와주지 않을 때",
-        "friend_message": "너는 왜 항상 집안일을 도와주지 않니? 나만 바쁜 줄 아니?"
+        "friend_message": "너는 왜 항상 집안일을 도와주지 않니? 나만 바쁜 줄 아니?",
     },
     {
         "situation": "직장_갈등",
         "situation_detail": "팀 프로젝트에서 실수했을 때",
-        "friend_message": "이번 프로젝트에서 네 태도가 많이 아쉬웠어. 팀원들에게 피해를 주고 있어."
+        "friend_message": "이번 프로젝트에서 네 태도가 많이 아쉬웠어. 팀원들에게 피해를 주고 있어.",
     },
     {
         "situation": "친구_갈등",
         "situation_detail": "약속을 자주 어길 때",
-        "friend_message": "너는 왜 항상 약속을 안 지켜? 나한테 관심이 없는 거야?"
-    }
+        "friend_message": "너는 왜 항상 약속을 안 지켜? 나한테 관심이 없는 거야?",
+    },
 ]
+
 
 def load_scenarios() -> List[Dict[str, str]]:
     """
@@ -359,25 +360,25 @@ class GameService:
             if not session:
                 logger.warning(f"Session not found: {session_id}")
                 return None
-                
+
             scenarios = session.get("scenarios", [])
-            
+
             # Store the original round number for the response
             original_round_number = round_number
-            
+
             # Convert to 0-based for array access
             array_index = round_number - 1 if round_number > 0 else 0
-                
+
             if not 0 <= array_index < len(scenarios):
                 logger.warning("Invalid round number: %d", round_number)
                 return None
-                
+
             scenario = scenarios[array_index]
-            
+
             # Extract situation and situation_detail from the scenario
             situation = scenario.get("situation", "친구_갈등")
             situation_detail = scenario.get("situation_detail", "")
-            
+
             round_data = {
                 "round_number": original_round_number,  # Return the original 1-based round number
                 "situation": situation,  # General situation type (e.g., "친구_갈등")
@@ -391,7 +392,11 @@ class GameService:
             return None
 
     async def submit_response(
-        self, session_id: str, user_response: str, round_number: int, situation: str = "친구_갈등"
+        self,
+        session_id: str,
+        user_response: str,
+        round_number: int,
+        situation: str = "친구_갈등",
     ) -> Optional[Dict[str, Any]]:
         """Submit a user response for a round and return the score.
 
@@ -414,13 +419,13 @@ class GameService:
             raise ValueError("Invalid session ID")
 
         session = sessions[session_id]
-        
+
         # Get the current round number (1-based)
         current_round = session["current_round"]
-        
+
         # Convert 0-based round_number to 1-based for comparison if needed
         effective_round = round_number + 1 if round_number == 0 else round_number
-        
+
         if effective_round != current_round:
             raise ValueError(
                 f"Invalid round number. Expected {current_round}, got {round_number}"
@@ -429,11 +434,13 @@ class GameService:
         # Get the current round's situation and situation_detail
         round_info = self.get_round(session_id, round_number)
         if not round_info:
-            raise ValueError(f"Could not find round {round_number} in session {session_id}")
-            
+            raise ValueError(
+                f"Could not find round {round_number} in session {session_id}"
+            )
+
         situation = round_info.get("situation", "친구_갈등")
         situation_detail = round_info.get("situation_detail", "")
-        
+
         # Calculate score and determine if response matches the opposite style
         score = self._calculate_score(user_response, session["user_type"], situation)
         is_correct_style = score >= 50.0  # Assuming 50% is the threshold
@@ -549,7 +556,7 @@ class GameService:
                 # Ensure the game is marked as completed
                 if not db_session.completed_at:
                     db_session.completed_at = datetime.now()
-                
+
                 # Calculate total score if not already set
                 if not db_session.total_score:
                     db_session.total_score = sum(score.score for score in scores)
@@ -618,8 +625,10 @@ class GameService:
                         "score": score.score,
                         "user_response": score.user_response,
                         "is_correct_style": score.is_correct_style,
-                        "situation": score.situation or "친구_갈등",  # Default to 친구_갈등 if not set
-                        "situation_detail": score.situation_detail or ""  # Include situation_detail if available
+                        "situation": score.situation
+                        or "친구_갈등",  # Default to 친구_갈등 if not set
+                        "situation_detail": score.situation_detail
+                        or "",  # Include situation_detail if available
                     }
                     round_scores.append(round_score)
 
@@ -960,12 +969,14 @@ class GameService:
 
             traceback.print_exc()
 
-    def _calculate_score(self, response: str, user_type: UserType, situation: str = "친구_갈등") -> float:
-        """Calculate score based on how well the response matches the opposite style.
+    def _calculate_score(
+        self, response: str, user_type: UserType, situation: str = "친구_갈등"
+    ) -> float:
+        """Calculate score based on how well the response matches the user's chosen style.
 
         Args:
             response: The player's response text
-            user_type: The player's MBTI type (T/F)
+            user_type: The player's MBTI type (T/F) - this is the style they want to practice
             situation: The situation label (e.g., "연인_갈등", "친구_갈등")
 
         Returns:
@@ -980,30 +991,28 @@ class GameService:
         try:
             # Get prediction from the model with the situation
             result = predict_tf_style(response, situation=situation)
-            
-            # Get the probability of the opposite style
-            opposite_style = self._get_opposite_style(user_type)
+
+            # Use the user's chosen style for scoring
+            chosen_style = user_type.value  # Get 'T' or 'F' from the UserType enum
             # Use the correct key from predict_tf_style's return value
-            score = result[f"{opposite_style}_prob"]
-            
+            score = result[f"{chosen_style}_prob"]
+
             # Debug log for verification
-            logger.debug("="*50)
-            logger.debug(f"User type: {user_type}")
-            logger.debug(f"Opposite style: {opposite_style}")
+            logger.debug("=" * 50)
+            logger.debug(f"User type (chosen style): {chosen_style}")
             logger.debug(f"Raw model result: {result}")
-            logger.debug(f"Selected score: {score} (from {opposite_style}_prob)")
-            
+            logger.debug(f"Selected score: {score} (from {chosen_style}_prob)")
+
             logger.debug(
-                "Scored response '%s' for type %s in situation %s: %.2f (opposite: %s)",
+                "Scored response '%s' for type %s in situation %s: %.2f",
                 response[:50] + ("..." if len(response) > 50 else ""),
-                user_type,
+                chosen_style,
                 situation,
                 score,
-                opposite_style,
             )
-            
+
             return score
-            
+
         except Exception as e:
             logger.error("Error calculating score: %s", str(e), exc_info=True)
             # Return a neutral score in case of errors
